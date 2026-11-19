@@ -126,6 +126,11 @@ mv "$APP/Contents/MacOS/$NAME.sdk" "$APP/Contents/MacOS/$NAME"
 # The AppleScript dictionary (Scripting.swift): read-only, tabs' addresses
 # and titles. The plist below points to it.
 cp Search.sdef "$APP/Contents/Resources/"
+# The MCP server a coding agent runs, which Settings › About › Developer sets up
+# in Claude Code and Codex (see DeveloperSetup.swift). It is the repository's
+# own file, shipped beside the binary so the path it writes is the app's.
+cp search-mcp "$APP/Contents/Resources/search-mcp"
+chmod +x "$APP/Contents/Resources/search-mcp"
 
 # Symbols stay out of the app. The linker leaves every function's name and a
 # map back to the source in the binary — 15,000 entries, more than half of

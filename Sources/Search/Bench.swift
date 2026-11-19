@@ -4422,6 +4422,33 @@ final class Bench {
                         "icon": summary?.icon?.absoluteString ?? ""])
             }
 
+        case "developers":
+            // What Settings › About › Developer writes for an agent, into a home
+            // a test names (see DeveloperSetup.swift). Test runs only: it writes
+            // files where it is told.
+            guard Store.testing else { answer(["error": "developers only works on a --test run"]); return }
+            guard let name = request["client"] as? String,
+                  let client = DeveloperSetup.Client(rawValue: name) else {
+                answer(["error": "developers needs a client: claude_code or codex"])
+                return
+            }
+            guard let command = DeveloperSetup.command else {
+                answer(["error": "this build has no MCP server inside it"])
+                return
+            }
+            guard let home = (request["home"] as? String).map({ URL(fileURLWithPath: $0, isDirectory: true) }) else {
+                answer(["error": "developers needs a home"])
+                return
+            }
+            do {
+                let written = try DeveloperSetup.apply(for: client, command: command, home: home)
+                answer(["command": command,
+                        "written": written.map(\.path),
+                        "json": DeveloperSetup.json(command: command)])
+            } catch {
+                answer(["error": error.localizedDescription])
+            }
+
         case "split":
             splitCommand(request, browser: browser, answer)
 

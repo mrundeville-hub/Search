@@ -699,6 +699,9 @@ struct SettingsPanel: View {
             }
         case "links.little": Switch(on: $prefs.littleLinks)
         case "links.cards": Switch(on: $prefs.linkCards)
+        case "developer.claudecode": DeveloperButton(client: .claudeCode, prefs: prefs)
+        case "developer.codex": DeveloperButton(client: .codex, prefs: prefs)
+        case "developer.copyconfig": CopyAgentConfig()
         case "pages.snippets": Switch(on: $prefs.pageSnippets)
         case "links.little.tabs": Switch(on: $prefs.littleFindsTabs)
         case "reader.twins": Switch(on: $prefs.readsTwins)
