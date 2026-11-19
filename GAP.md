@@ -86,6 +86,14 @@ form, so the first port is userscripts.
 | 4 | Chat column with the assistant | `Chat*.swift` | 29 files | sits beside `AIAssist.swift` |
 | 5 | In-app MCP server + wider tool domains | `Mcp*.swift`, `McpTools*.swift` | 3052 lines | extends `search-mcp`/`AgentControl.swift` |
 
+## Building the fork
+
+Upstream `859c951` **does not compile** with this machine's toolchain (Xcode 26.3, Swift 6.2.4):
+`App.body` exceeds the type checker's patience, `Recall.swift`'s gradient opacity is ambiguous, and
+`Fold.shownPages` shadows `Browser.tabs` with the name it declares. The fork carries three
+behaviour-preserving fixes first (`8223cf6`), then the ports. `swift build` and `swift test` both
+work from there; `./build.sh` assembles the app.
+
 ## Corrections to this document
 
 2026-11-20, after the first port attempt: three rows above were wrong because the first pass went

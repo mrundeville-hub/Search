@@ -1245,6 +1245,10 @@ final class Tab: ObservableObject, Identifiable {
         if let style = SiteStyles.shared.css(on: SiteStyles.host(of: url ?? pageAddress)) {
             add(SiteStyles.script(style), .atDocumentStart, mainFrameOnly: true, in: Web.world)
         }
+        // Userscripts that asked for this address, in the page's own world so
+        // they can reach the page's own globals, the way a `@grant none` script
+        // runs in Tampermonkey (see Userscripts.swift).
+        scripts += Userscripts.shared.scripts(for: url ?? pageAddress)
         // The same scripts as the document before's, the usual case, are
         // left where they are: taken out and put back, every one was sent to
         // the page's process again on every link followed.
