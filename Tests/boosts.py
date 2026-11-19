@@ -8,6 +8,7 @@ is kept by is 127.0.0.1.
 """
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,6 +50,36 @@ def main():
         other = sv.page("plain")
         t.ok("and on the next page of that site too",
              look(other, "document.body.dataset.boost || ''") == "ran")
+
+        # Sharing it: out to a file, and back in as another site's boost.
+        folder = Path(tempfile.mkdtemp(prefix="boost-share-"))
+        shared = folder / "127.0.0.1.boost"
+        wrote = sv.cmd({"do": "boost", "action": "export", "site": "127.0.0.1", "path": str(shared)})
+        t.ok("a boost can be written to a file", wrote.get("written") == str(shared) and shared.exists(), wrote)
+        kept = json.loads(shared.read_text())
+        t.ok("the file carries both halves and its site",
+             kept.get("format") == "search-boost" and kept.get("css") == CSS and kept.get("script") == SCRIPT, kept)
+
+        elsewhere = json.dumps({"format": "search-boost", "version": 1,
+                                "site": "other.example", "css": "h1 { color: teal }",
+                                "script": "window.__shared = 1;"})
+        theirs = folder / "other.boost"
+        theirs.write_text(elsewhere)
+        brought = sv.cmd({"do": "boost", "action": "import", "path": str(theirs)})
+        t.ok("a boost brought in lands on its own site", brought.get("site") == "other.example", brought)
+        back = sv.cmd({"do": "boost", "action": "export", "site": "other.example", "path": str(folder / "x.boost")})
+        round_trip = json.loads(back["text"])
+        t.ok("and is there afterwards, both halves",
+             round_trip["css"] == "h1 { color: teal }" and round_trip["script"] == "window.__shared = 1;", round_trip)
+
+        bad = folder / "bad.boost"
+        bad.write_text('{"format": "search-boost", "site": "a.com", "css": "  "}')
+        try:
+            sv.cmd({"do": "boost", "action": "import", "path": str(bad)})
+            t.ok("a file with nothing in it is refused, with a reason", False, "it was accepted")
+        except RuntimeError as refusal:
+            t.ok("a file with nothing in it is refused, with a reason",
+                 "nothing in it" in str(refusal), str(refusal))
 
         # Off: kept, but neither worn nor run.
         sv.setup()

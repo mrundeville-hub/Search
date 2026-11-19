@@ -274,6 +274,15 @@ struct StylePanel: View {
                 if !text.isEmpty {
                     Pill("Clear") { text = "" }
                 }
+                // A boost is a file: this site's two halves, as it stands —
+                // including what has just been typed and not yet committed.
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Pill("Share…") { share() }
+                    Pill("Copy") {
+                        StylePanel.write(text, half: half, on: host)
+                        if let boost = SiteStyles.shared.boost(on: host) { BoostSharing.copy(boost) }
+                    }
+                }
                 Spacer()
             }
         }
@@ -349,6 +358,14 @@ struct StylePanel: View {
         }
     }
 
+    /// What is in the editor now goes into the store first, so the file holds
+    /// what is on the page rather than the last committed letter.
+    private func share() {
+        StylePanel.write(text, half: half, on: host)
+        guard let boost = SiteStyles.shared.boost(on: host) else { return }
+        BoostSharing.save(boost, from: browser.window)
+    }
+
     private func close() {
         pending?.cancel()
         StylePanel.write(text, half: half, on: host)
@@ -375,6 +392,7 @@ struct SiteStylesControl: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
+            Pill("Bring in…") { _ = BoostSharing.bring(inFrom: nil, into: styles) }
             Switch(on: $prefs.sitesStyles)
         }
     }

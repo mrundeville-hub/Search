@@ -4440,6 +4440,37 @@ final class Bench {
                     "floatingCall": browser.floatingCall.map { String($0.uuidString.prefix(8)) } ?? "",
                     "showing": browser.callWindow.showing])
 
+        case "boost":
+            // A site's boost, as a file: written, or read back and put on its
+            // site (see BoostFile.swift). Test runs only: it names the path.
+            guard Store.testing else { answer(["error": "boost only works on a --test run"]); return }
+            let path = (request["path"] as? String).map { URL(fileURLWithPath: $0) }
+            switch request["action"] as? String {
+            case "export":
+                guard let site = request["site"] as? String,
+                      let boost = SiteStyles.shared.boost(on: site) else {
+                    answer(["error": "nothing to share for that site"])
+                    return
+                }
+                guard let path else { answer(["error": "boost export needs a path"]); return }
+                do {
+                    try boost.json().write(to: path, atomically: true, encoding: .utf8)
+                    answer(["written": path.path, "site": boost.site, "text": boost.json()])
+                } catch {
+                    answer(["error": error.localizedDescription])
+                }
+            case "import":
+                guard let path else { answer(["error": "boost import needs a path"]); return }
+                do {
+                    let boost = try BoostFile.read(at: path)
+                    answer(["said": SiteStyles.shared.bring(in: boost), "site": boost.site])
+                } catch {
+                    answer(["error": error.localizedDescription])
+                }
+            default:
+                answer(["error": "boost needs an action: export or import"])
+            }
+
         case "developers":
             // What Settings › About › Developer writes for an agent, into a home
             // a test names (see DeveloperSetup.swift). Test runs only: it writes
