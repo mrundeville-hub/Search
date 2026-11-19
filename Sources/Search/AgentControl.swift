@@ -1144,6 +1144,32 @@ final class AgentControl: ObservableObject {
                 try waitFor(request, session, browser, answer)
             case "shot":
                 try shot(request, session, browser, answer)
+            case "bookmarks":
+                answer(["bookmarks": AgentWide.bookmarks(browser)])
+            case "bookmark_add":
+                guard let url = AgentRules.address(request["url"] as? String ?? "") else { throw Self.badAddress }
+                let title = (request["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                    ?? url.host() ?? url.absoluteString
+                let made = browser.bookmarks.add(url, title: title)
+                answer(["added": made != nil,
+                        "already": made == nil && browser.bookmarks.contains(url),
+                        "title": made?.title ?? title,
+                        "url": url.absoluteString])
+            case "history":
+                let limit = min(max(request["limit"] as? Int ?? 20, 1), 50)
+                answer(["places": AgentWide.recent(browser,
+                                                  words: request["query"] as? String ?? "",
+                                                  limit: limit)])
+            case "spaces":
+                answer(["spaces": AgentWide.spaces(browser)])
+            case "space_switch":
+                let spaces = browser.spaces
+                guard let index = request["index"] as? Int, spaces.indices.contains(index) else {
+                    throw AgentRefusal(code: "no_space", message: "There is no space at that index",
+                                       hint: "Ask for the spaces first: index counts from 0, as the window's own shortcuts do.")
+                }
+                if spaces[index].id != browser.spaceID { browser.goToSpace(spaces[index].id) }
+                answer(["index": index, "name": spaces[index].name, "current": true])
             case "bye":
                 answer(["bye": true])
                 DispatchQueue.main.async { [weak self] in self?.end(session, "it said goodbye") }

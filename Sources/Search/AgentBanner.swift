@@ -296,7 +296,8 @@ private struct AgentQuestion: View {
     private var detail: String {
         let from = session.program.isEmpty ? "" : "From \(session.program) on this Mac. "
         return from + "It works in tabs of its own while you watch, until you press Stop. "
-            + "It never sees passwords, card numbers, private tabs or Settings."
+            + "It never sees passwords, card numbers, private tabs or Settings. "
+            + "It can read your bookmarks and the places you have been lately, and go to another space of this window."
     }
 }
 

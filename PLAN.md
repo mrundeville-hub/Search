@@ -35,7 +35,7 @@ not included in this repo).
 | Order | Work | Source in Yab | Done when |
 |---|---|---|---|
 | 1 | MCP server inside the app (no Python bridge): a loopback socket the app serves, JSON-RPC over stdio through a small `search` CLI | `Mcp.swift`, `McpRun.swift`, `McpTool.swift` | `search` CLI speaks `initialize`/`tools/list`/`tools/call`; existing `search-mcp` keeps working |
-| 2 | Tool domains beyond pages: `bookmark_*`, `memory_*`, `keep_password`/`keep_address`, `lay_out_tabs`, `approval_status` | `McpToolsShelf.swift`, `McpToolsKnowing.swift`, `McpToolsPerson.swift` | every tool maps onto an existing verb in `AgentControl.swift`; nothing new gets reach it did not have |
+| 2 | Tool domains beyond pages — **half done**: `bookmarks`, `bookmark_add`, `history`, `spaces`, `space_switch` (`AgentWide.swift` + `search-mcp`), the ask card says what they reach. Left: `memory_*`, `keep_password`/`keep_address`, `lay_out_tabs`, `approval_status` (and mail, which needs the mail subsystem first) | `McpToolsShelf.swift`, `McpToolsKnowing.swift`, `McpToolsPerson.swift` | every tool maps onto an existing verb in `AgentControl.swift`; nothing new gets reach it did not have |
 | 3 | Approvals parity: send, pay, delete ask first and show what will happen | `Approvals.swift`, `AssistantApprovals.swift` | an agent action that spends or sends is blocked until answered in-window |
 | 4 | One-click setup into Claude Code / Codex / Cursor + bundled skill | `Skills/`, `SkillInstall` in Yab's settings | Settings › Developers writes the entries and can remove only what it added |
 | 5 | Chat column with the assistant, per space | `Chat*.swift` | the column opens beside the page; `PageQuestions.swift` still answers inline asks |
