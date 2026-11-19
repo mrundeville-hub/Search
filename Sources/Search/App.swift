@@ -877,7 +877,11 @@ struct ContentView: View {
         }
     }
 
-    var body: some View {
+    /// The page and what is drawn over it — the fold at the edge, the bars,
+    /// a peek, the field, the panels — before the modifiers that only read or
+    /// answer. Its own view for the same reason `switcherOverlay` is: one chain
+    /// of every modifier here is more than Swift 6.2's type checker will take.
+    private var pageLayer: some View {
         window_
             // The column folded away, and out again at the edge (see Fold.swift).
             .overlay(alignment: sideOnRight ? .trailing : .leading) {
@@ -897,6 +901,10 @@ struct ContentView: View {
                     // the title bar's band is page too.
                     .ignoresSafeArea()
             }
+    }
+
+    var body: some View {
+        pageLayer
             .overlay { field }
             .overlay { panels }
             .overlay { switcherOverlay }

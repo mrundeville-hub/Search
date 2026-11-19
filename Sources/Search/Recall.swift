@@ -426,7 +426,10 @@ struct DownloadsPanel: View {
             .mask {
                 VStack(spacing: 0) {
                     Rectangle()
-                    LinearGradient(colors: [.black, .black.opacity(1 - min(1, max(0, end - height) / fade))],
+                    // Worked out before the gradient: inside its arguments Swift
+                    // 6.2's type checker can't tell the arms of min and max apart.
+                    let under: CGFloat = 1 - min(1, max(0, end - height) / fade)
+                    LinearGradient(colors: [.black, .black.opacity(under)],
                                    startPoint: .top, endPoint: .bottom)
                         .frame(height: fade)
                 }
