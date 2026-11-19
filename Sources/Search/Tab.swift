@@ -1255,6 +1255,11 @@ final class Tab: ObservableObject, Identifiable {
         if let boost = SiteStyles.shared.script(on: SiteStyles.host(of: url ?? pageAddress)) {
             add(SiteStyles.scriptCode(boost), .atDocumentEnd, mainFrameOnly: true, in: .page)
         }
+        // Snippets: a name typed in a box, taken in as the text it stands for.
+        // Every frame, since a form can be in one (see Snippets.swift).
+        if let snippets = Snippets.shared.script() {
+            add(snippets, .atDocumentEnd, mainFrameOnly: false, in: .page)
+        }
         // Userscripts that asked for this address, in the page's own world so
         // they can reach the page's own globals, the way a `@grant none` script
         // runs in Tampermonkey (see Userscripts.swift).

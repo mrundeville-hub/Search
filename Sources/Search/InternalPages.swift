@@ -19,6 +19,7 @@ struct InternalPage: Equatable {
         case importing = "import"
         case notes = "release-notes"
         case userscripts
+        case snippets
     }
 
     var kind: Kind
@@ -60,6 +61,7 @@ struct InternalPage: Equatable {
         case .importing: return "Bring Things Over"
         case .notes: return "What's New"
         case .userscripts: return "Userscripts"
+        case .snippets: return "Snippets"
         }
     }
 
@@ -74,6 +76,7 @@ struct InternalPage: Equatable {
         case .importing: return "square.and.arrow.down"
         case .notes: return "sparkles"
         case .userscripts: return "curlybraces"
+        case .snippets: return "text.append"
         }
     }
 
@@ -176,6 +179,8 @@ struct InternalPageView: View {
             ReleaseNotesPanel { browser.putAway(.notes) }
         case .userscripts:
             UserscriptsPanel()
+        case .snippets:
+            SnippetsPanel()
         }
     }
 }

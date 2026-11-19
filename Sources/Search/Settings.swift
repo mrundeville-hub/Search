@@ -699,6 +699,7 @@ struct SettingsPanel: View {
             }
         case "links.little": Switch(on: $prefs.littleLinks)
         case "links.cards": Switch(on: $prefs.linkCards)
+        case "pages.snippets": Switch(on: $prefs.pageSnippets)
         case "links.little.tabs": Switch(on: $prefs.littleFindsTabs)
         case "reader.twins": Switch(on: $prefs.readsTwins)
         case "reader.follows": Switch(on: $prefs.readerFollowsLook)

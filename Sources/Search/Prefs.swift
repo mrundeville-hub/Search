@@ -731,6 +731,14 @@ final class Preferences: ObservableObject {
             HoveredLink.on = showsLinks || linkCards
         }
     }
+    /// Snippets in a page's boxes: `;sig` and a space, and the signature is
+    /// there (see Snippets.swift). Off unless asked for.
+    @Published var pageSnippets: Bool {
+        didSet {
+            store.set(pageSnippets, forKey: "pages.snippets")
+            Snippets.on = pageSnippets
+        }
+    }
     /// A card about the link under the pointer: the page's own title,
     /// description and icon, asked for once the pointer rests on a link (see
     /// LinkCards.swift). Off unless asked for — a card means the page you are
@@ -1196,6 +1204,9 @@ final class Preferences: ObservableObject {
         downloadsOpening = store.string(forKey: "downloads.open").flatMap(DownloadsOpening.init(rawValue:)) ?? .tab
         let links = store.object(forKey: "links.show") as? Bool ?? true
         showsLinks = links
+        let snippets = store.bool(forKey: "pages.snippets")
+        pageSnippets = snippets
+        Snippets.on = snippets
         let cards = store.bool(forKey: "links.cards")
         linkCards = cards
         LinkCards.on = cards
