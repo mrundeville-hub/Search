@@ -465,6 +465,18 @@ TOOLS = [
         {"type": "object", "properties": {"index": {"type": "number"}}, "required": ["index"]},
     ),
     (
+        "approval_status",
+        passing("approval_status", []),
+        "What the person has agreed to — whether you may use Search at all, and whether you may read their own tabs — with the client and program Search sees. Never more than that.",
+        {"type": "object", "properties": {}},
+    ),
+    (
+        "close_my_tabs",
+        passing("close_my_tabs", []),
+        "Close every tab you opened and leave the person's own alone. Yab's lay_out_tabs arranges the whole window; the window is theirs, so this only takes back your own tabs.",
+        {"type": "object", "properties": {}},
+    ),
+    (
         "memory_write",
         passing("memory_write", ["text", "key"]),
         "Keep a note for your next session: what you learned about this Mac, a site or a task. 4,000 characters at most, and the two hundredth note pushes the oldest out.",

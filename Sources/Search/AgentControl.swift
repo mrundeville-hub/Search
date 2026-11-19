@@ -1160,6 +1160,30 @@ final class AgentControl: ObservableObject {
                 answer(["places": AgentWide.recent(browser,
                                                   words: request["query"] as? String ?? "",
                                                   limit: limit)])
+            case "approval_status":
+                // What the person has agreed to, and nothing else: an agent that
+                // can see this can tell a refusal from a bug.
+                answer(["allowed": session.consent.state == .allowed,
+                        "askedAt": ISO8601DateFormatter().string(from: session.asked),
+                        "client": session.client,
+                        "program": session.program,
+                        "seesTabs": session.consent.seesTabs,
+                        "myTabs": session.own.count,
+                        "remembered": session.auto,
+                        "note": session.consent.seesTabs
+                            ? "You may read the person's own tabs; you may still only act in your own."
+                            : "You may only use tabs of your own."])
+            case "close_my_tabs":
+                // Its own tabs, not the person's: Yab's lay_out_tabs arranges the
+                // whole window, which is theirs to arrange.
+                var closed = 0
+                for id in session.own {
+                    guard let tab = browser.tabs.first(where: { $0.id == id }) else { continue }
+                    browser.close(tab)
+                    closed += 1
+                }
+                session.own.removeAll()
+                answer(["closed": closed])
             case "memory_write":
                 let key = request["key"] as? String
                 guard let note = AgentMemory.shared.write(request["text"] as? String ?? "", key: key) else {

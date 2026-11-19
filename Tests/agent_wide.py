@@ -127,6 +127,28 @@ def main():
         narrowed, bad = client.tool("history", query="nothing-matches-this-at-all")
         t.ok("words that match nothing narrow it away", not bad and narrowed["places"] == [], narrowed)
 
+        # ---- what the person agreed to, and taking its own tabs back
+        status, bad = client.tool("approval_status")
+        t.ok("the agent can tell what was agreed to", not bad and status["allowed"] is True, status)
+        t.ok("including whether it may see the person's tabs", status.get("seesTabs") is False, status)
+
+        # A tab of the person's, then two of the agent's, then its own taken back.
+        sv.sp("open", url=f"{sv.BASE}/person")
+        time.sleep(0.6)
+        for name in ("one", "two"):
+            client.tool("open_tab", url=f"{sv.BASE}/{name}")
+        before = [x for x in sv.cmd({"do": "tabs"})["tabs"]]
+        t.ok("the agent has two tabs of its own open",
+             len([x for x in before if x.get("bench") or x.get("mine")]) >= 2 or status.get("myTabs") is not None,
+             [x["url"] for x in before])
+
+        closed, bad = client.tool("close_my_tabs")
+        t.ok("close_my_tabs closes them", not bad and closed["closed"] >= 1, closed)
+        after = [x["url"] for x in sv.cmd({"do": "tabs"})["tabs"]]
+        t.ok("and leaves the person's own tab alone",
+             any(url.endswith("/person") for url in after), after)
+        t.ok("with none of the agent's left", not any(url.endswith("/one") or url.endswith("/two") for url in after), after)
+
         # ---- the notebook
         kept_note, bad = client.tool("memory_write", text="This Mac runs the dev server on :3000",
                                      key="dev-server")
