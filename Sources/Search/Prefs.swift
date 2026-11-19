@@ -728,7 +728,18 @@ final class Preferences: ObservableObject {
     @Published var showsLinks: Bool {
         didSet {
             store.set(showsLinks, forKey: "links.show")
-            HoveredLink.on = showsLinks
+            HoveredLink.on = showsLinks || linkCards
+        }
+    }
+    /// A card about the link under the pointer: the page's own title,
+    /// description and icon, asked for once the pointer rests on a link (see
+    /// LinkCards.swift). Off unless asked for — a card means the page you are
+    /// hovering is fetched, and its owner can see that.
+    @Published var linkCards: Bool {
+        didSet {
+            store.set(linkCards, forKey: "links.cards")
+            LinkCards.on = linkCards
+            HoveredLink.on = showsLinks || linkCards
         }
     }
     /// A back or forward swipe held once armed shows the pages that way to
@@ -1185,7 +1196,10 @@ final class Preferences: ObservableObject {
         downloadsOpening = store.string(forKey: "downloads.open").flatMap(DownloadsOpening.init(rawValue:)) ?? .tab
         let links = store.object(forKey: "links.show") as? Bool ?? true
         showsLinks = links
-        HoveredLink.on = links
+        let cards = store.bool(forKey: "links.cards")
+        linkCards = cards
+        LinkCards.on = cards
+        HoveredLink.on = links || cards
         let dusk = store.bool(forKey: "pages.dusk")
         darkensPages = dusk
         Dusk.shared.on = dusk

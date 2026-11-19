@@ -79,7 +79,11 @@ final class LinkStatus: ObservableObject {
     /// The page the link is on — with two pages up, the bubble stands over
     /// that one (see PaneLayers).
     @Published private(set) var page: ObjectIdentifier?
+    /// What the page under the pointer says it is, once the pointer has rested
+    /// there and the setting is on (see LinkCards.swift).
+    @Published private(set) var card: LinkCardSummary?
     private var hiding: DispatchWorkItem?
+    private var resting: DispatchWorkItem?
 
     /// `page`: the view the page is drawn in, to learn where the pointer is.
     func show(_ address: String?, over page: NSView?) {
@@ -94,13 +98,39 @@ final class LinkStatus: ObservableObject {
         let id = page.map(ObjectIdentifier.init)
         if self.page != id { self.page = id }
         if let page { place(over: page) }
+        rest(on: address)
     }
 
     /// A tab change or navigation clears the old destination without waiting.
     func dismiss() {
         hiding?.cancel()
         hiding = nil
+        resting?.cancel()
+        resting = nil
         if destination != nil { destination = nil }
+        if card != nil { card = nil }
+    }
+
+    /// A card means asking the page you are hovering for itself, so it is only
+    /// asked once the pointer has rested on the link: a hand crossing a page on
+    /// its way somewhere else asks nothing. A card already up for another link
+    /// goes at once, so what is drawn is never about the wrong address.
+    private func rest(on address: String) {
+        resting?.cancel()
+        resting = nil
+        if card != nil { card = nil }
+        guard LinkCards.on, let url = URL(string: address), url.scheme?.hasPrefix("http") == true else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                let summary = await LinkCards.shared.summary(for: url)
+                // The pointer may have moved on while the page was asked.
+                guard self.destination == address else { return }
+                if self.card != summary { self.card = summary }
+            }
+        }
+        resting = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
     }
 
     /// A link under the bubble's corner gets the bubble in the other one.
@@ -131,18 +161,24 @@ struct LinkBubble: View {
                     Spacer(minLength: 0)
                     HStack(spacing: 0) {
                         if status.onRight { Spacer(minLength: 0) }
-                        Text(address)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Palette.ink)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .padding(.horizontal, 11)
-                            .frame(height: 26)
-                            .background(Palette.ground, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
-                            .shadow(color: .black.opacity(0.08), radius: 12, y: 3)
-                            .frame(maxWidth: min(space.size.width * 0.6, 640),
-                                   alignment: status.onRight ? .trailing : .leading)
+                        Group {
+                            if let card = status.card {
+                                LinkCardView(card: card)
+                            } else {
+                                Text(address)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Palette.ink)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .padding(.horizontal, 11)
+                                    .frame(height: 26)
+                                    .background(Palette.ground, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
+                                    .shadow(color: .black.opacity(0.08), radius: 12, y: 3)
+                            }
+                        }
+                        .frame(maxWidth: min(space.size.width * 0.6, 640),
+                               alignment: status.onRight ? .trailing : .leading)
                         if !status.onRight { Spacer(minLength: 0) }
                     }
                     .padding(.horizontal, 10)

@@ -4402,6 +4402,26 @@ final class Bench {
                 }
             }
 
+        case "linkcard":
+            // The card about an address, as a resting pointer asks for it (see
+            // LinkCards.swift). Test runs only: it makes a request.
+            guard Store.testing else { answer(["error": "linkcard only works on a --test run"]); return }
+            guard let text = request["url"] as? String, let url = URL(string: text) else {
+                answer(["error": "linkcard needs a url"])
+                return
+            }
+            if let on = request["on"] as? Bool {
+                LinkCards.on = on
+                browser.prefs.linkCards = on
+            }
+            Task { @MainActor in
+                let summary = await LinkCards.shared.summary(for: url)
+                answer(["title": summary?.title ?? "",
+                        "summary": summary?.summary ?? "",
+                        "host": summary?.host ?? "",
+                        "icon": summary?.icon?.absoluteString ?? ""])
+            }
+
         case "split":
             splitCommand(request, browser: browser, answer)
 
