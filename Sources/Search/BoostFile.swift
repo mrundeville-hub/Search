@@ -30,11 +30,14 @@ struct BoostFile: Codable, Equatable {
     var site: String
     var css: String = ""
     var script: String = ""
+    /// The colours and type chosen for the site, when there are any.
+    var look: BoostLook? = nil
 
-    init(site: String, css: String = "", script: String = "") {
+    init(site: String, css: String = "", script: String = "", look: BoostLook? = nil) {
         self.site = site
         self.css = css
         self.script = script
+        self.look = look
     }
 
     /// A file from a person's hand needn't carry every key: what it doesn't say
@@ -46,12 +49,14 @@ struct BoostFile: Codable, Equatable {
         site = try box.decode(String.self, forKey: .site)
         css = try box.decodeIfPresent(String.self, forKey: .css) ?? ""
         script = try box.decodeIfPresent(String.self, forKey: .script) ?? ""
+        look = try box.decodeIfPresent(BoostLook.self, forKey: .look)
     }
 
     /// Whether either half has anything in it.
     var isEmpty: Bool {
         css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (look?.isEmpty ?? true)
     }
 
     struct Invalid: LocalizedError {
@@ -79,7 +84,8 @@ struct BoostFile: Codable, Equatable {
         }
         guard !boost.isEmpty else { throw Invalid("That boost has nothing in it.") }
         return BoostFile(site: site.hasPrefix("www.") ? String(site.dropFirst(4)) : site,
-                         css: boost.css, script: boost.script)
+                         css: boost.css, script: boost.script,
+                         look: boost.look.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     static func read(at url: URL) throws -> BoostFile {
@@ -109,7 +115,8 @@ extension SiteStyles {
     /// This site's boost, as it would be written to a file. Nil when the site
     /// has neither a style nor a script.
     func boost(on host: String) -> BoostFile? {
-        let boost = BoostFile(site: host, css: written(on: host), script: writtenScript(on: host))
+        let boost = BoostFile(site: host, css: written(on: host), script: writtenScript(on: host),
+                              look: look(on: host))
         return boost.isEmpty ? nil : boost
     }
 
@@ -119,10 +126,12 @@ extension SiteStyles {
     func bring(in boost: BoostFile) -> String {
         set(boost.css, on: boost.site)
         setScript(boost.script, on: boost.site)
+        if let look = boost.look { setLook(look, on: boost.site) }
         revise()
         var parts: [String] = []
         if !boost.css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append("style") }
         if !boost.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append("script") }
+        if let look = boost.look, !look.isEmpty { parts.append("colours and type") }
         return "Brought in \(parts.joined(separator: " and ")) for \(boost.site)"
     }
 

@@ -29,6 +29,8 @@ final class SiteStyles: ObservableObject {
     @Published private(set) var byHost: [String: String] = [:]
     /// The script half of a boost, by the same host. Empty for most sites.
     @Published private(set) var scriptByHost: [String: String] = [:]
+    /// Its colours and type (see BoostLook.swift), by the same host.
+    @Published private(set) var lookByHost: [String: BoostLook] = [:]
 
     /// A site whose style changed, for every window to pass on to its open
     /// pages of that site; nil for all of them, when the switch moved.
@@ -48,8 +50,25 @@ final class SiteStyles: ObservableObject {
 
     /// What a page of this site is to wear: nothing while the setting is off.
     func css(on host: String?) -> String? {
-        guard on, let host, let css = byHost[host], !css.isEmpty else { return nil }
-        return css
+        guard on, let host else { return nil }
+        // The look first, then what was written: a rule of yours of the same
+        // weight wins, which is what a person who writes CSS expects.
+        let parts = [look(on: host)?.css() ?? "", byHost[host] ?? ""]
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
+
+    /// The colours and type chosen for a site, on or off.
+    func look(on host: String) -> BoostLook? {
+        lookByHost[host].flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    func setLook(_ look: BoostLook, on host: String) {
+        let kept = look.isEmpty ? nil : look
+        guard lookByHost[host] != kept else { return }
+        lookByHost[host] = kept
+        save()
+        changed.send(host)
     }
 
     /// The script half, for a page of this site: nothing while the setting is
@@ -63,8 +82,10 @@ final class SiteStyles: ObservableObject {
     func written(on host: String) -> String { byHost[host] ?? "" }
     func writtenScript(on host: String) -> String { scriptByHost[host] ?? "" }
 
-    /// Every site with a style or a script.
-    var hosts: [String] { Set(byHost.keys).union(scriptByHost.keys).sorted() }
+    /// Every site with a style, a script or a look.
+    var hosts: [String] {
+        Set(byHost.keys).union(scriptByHost.keys).union(lookByHost.keys).sorted()
+    }
 
     /// Nothing but whitespace is no style at all, and the site is forgotten.
     func set(_ css: String, on host: String) {
@@ -88,6 +109,7 @@ final class SiteStyles: ObservableObject {
     func remove(on host: String) {
         set("", on: host)
         setScript("", on: host)
+        setLook(BoostLook(), on: host)
     }
 
     // MARK: - into the page
@@ -148,6 +170,8 @@ final class SiteStyles: ObservableObject {
         var version: Int
         var css: [String: String]
         var script: [String: String]
+        /// Absent in a file from before a boost had a look.
+        var look: [String: BoostLook]?
     }
 
     private func load() {
@@ -155,6 +179,7 @@ final class SiteStyles: ObservableObject {
         if let stored = try? JSONDecoder().decode(Kept.self, from: data) {
             byHost = stored.css
             scriptByHost = stored.script
+            lookByHost = stored.look ?? [:]
             return
         }
         if let old = try? JSONDecoder().decode([String: String].self, from: data) { byHost = old }
@@ -167,14 +192,16 @@ final class SiteStyles: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
             saving = false
-            let snapshot = Kept(version: 2, css: byHost, script: scriptByHost)
+            let snapshot = Kept(version: 3, css: byHost, script: scriptByHost, look: lookByHost)
             let file = file
             DispatchQueue.global(qos: .utility).async { Self.write(snapshot, to: file) }
         }
     }
 
     /// Now rather than in a moment, for a test.
-    func writeNow() { Self.write(Kept(version: 2, css: byHost, script: scriptByHost), to: file) }
+    func writeNow() {
+        Self.write(Kept(version: 3, css: byHost, script: scriptByHost, look: lookByHost), to: file)
+    }
 
     nonisolated private static func write(_ styles: Kept, to file: URL) {
         guard let data = try? JSONEncoder().encode(styles) else { return }
@@ -190,12 +217,13 @@ final class SiteStyles: ObservableObject {
 struct StylePanel: View {
     /// Which half is being written: the stylesheet, or the script beside it.
     enum Half: Hashable, CaseIterable {
-        case css, script
+        case css, script, look
 
         var title: String {
             switch self {
             case .css: return "CSS"
             case .script: return "Script"
+            case .look: return "Look"
             }
         }
     }
@@ -205,6 +233,7 @@ struct StylePanel: View {
 
     @State private var half: Half = .css
     @State private var text = ""
+    @State private var look = BoostLook()
     @State private var pending: DispatchWorkItem?
     @FocusState private var typing: Bool
     /// The card's width and the editor's height, as last left.
@@ -253,11 +282,17 @@ struct StylePanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
                     Segmented(options: Half.allCases.map { ($0, $0.title) }, selection: $half)
-                    Caption(half == .css
-                            ? "CSS for every page of this site"
-                            : "Script for every page, run once its document is there")
+                    Caption(half == .css ? "CSS for every page of this site"
+                            : half == .script ? "Script for every page, run once its document is there"
+                            : "Colours and type, before your own CSS")
                     Spacer()
                 }
+                if half == .look {
+                    LookControls(look: $look)
+                        .padding(8)
+                        .frame(height: shown.height, alignment: .top)
+                        .background(Palette.wash, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                } else {
                 TextEditor(text: $text)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Palette.ink)
@@ -267,6 +302,7 @@ struct StylePanel: View {
                     .padding(8)
                     .frame(height: shown.height)
                     .background(Palette.wash, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
             }
         } foot: {
             HStack(spacing: 8) {
@@ -289,7 +325,11 @@ struct StylePanel: View {
         .overlay(alignment: .bottomLeading) { corner }
         .onAppear {
             text = SiteStyles.shared.written(on: host)
+            look = SiteStyles.shared.look(on: host) ?? BoostLook()
             typing = true
+        }
+        .onChange(of: look) { _, now in
+            SiteStyles.shared.setLook(now, on: host)
         }
         .onChange(of: text) { _, now in
             // A moment after the last key, so a half-typed rule isn't sent
@@ -303,11 +343,15 @@ struct StylePanel: View {
         .onChange(of: half) { _, now in
             // Half-typed in one, and now the other: what was typed stays.
             pending?.cancel()
-            let leaving = now == .css ? Half.script : Half.css
-            StylePanel.write(text, half: leaving, on: host)
-            text = now == .css ? SiteStyles.shared.written(on: host)
-                                : SiteStyles.shared.writtenScript(on: host)
-            typing = true
+            if half != .look {
+                let leaving: Half = now == .css ? .script : .css
+                StylePanel.write(text, half: leaving, on: host)
+            }
+            if now != .look {
+                text = now == .css ? SiteStyles.shared.written(on: host)
+                                    : SiteStyles.shared.writtenScript(on: host)
+                typing = true
+            }
         }
     }
 
@@ -355,6 +399,7 @@ struct StylePanel: View {
         switch half {
         case .css: SiteStyles.shared.set(text, on: host)
         case .script: SiteStyles.shared.setScript(text, on: host)
+        case .look: break  // written as it is changed, by LookControls
         }
     }
 
@@ -394,6 +439,77 @@ struct SiteStylesControl: View {
             }
             Pill("Bring in…") { _ = BoostSharing.bring(inFrom: nil, into: styles) }
             Switch(on: $prefs.sitesStyles)
+        }
+    }
+}
+
+/// A boost's colours and type: four rows, each of them "the site's own" until
+/// it is turned on (see BoostLook.swift).
+struct LookControls: View {
+    @Binding var look: BoostLook
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            row("Ground", hex: $look.background)
+            row("Text", hex: $look.text)
+            HStack(spacing: 8) {
+                Text("Font")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 56, alignment: .leading)
+                Picker("", selection: $look.font) {
+                    ForEach(BoostLook.fonts, id: \.self) { font in
+                        Text(BoostLook.title(of: font)).tag(font)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 190)
+                Spacer()
+            }
+            HStack(spacing: 8) {
+                Text("Text size")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 56, alignment: .leading)
+                Toggle("", isOn: Binding(
+                    get: { look.size != nil },
+                    set: { look.size = $0 ? 16 : nil }))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                Stepper(value: Binding(
+                    get: { look.size ?? 16 },
+                    set: { look.size = min(max($0, 8), 32) }), in: 8...32) {
+                    Text(look.size.map { "\(Int($0)) px" } ?? "the site's own")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.muted)
+                }
+                .disabled(look.size == nil)
+                Spacer()
+            }
+        }
+    }
+
+    private func row(_ title: String, hex: Binding<String>) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 56, alignment: .leading)
+            Toggle("", isOn: Binding(
+                get: { !hex.wrappedValue.isEmpty },
+                set: { hex.wrappedValue = $0 ? "#111111" : "" }))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            ColorPicker("", selection: Binding(
+                get: { BoostLook.colour(hex.wrappedValue) ?? .black },
+                set: { hex.wrappedValue = BoostLook.hex($0) }),
+                        supportsOpacity: false)
+                .labelsHidden()
+                .disabled(hex.wrappedValue.isEmpty)
+            Text(hex.wrappedValue.isEmpty ? "the site's own" : hex.wrappedValue)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(Palette.muted)
+            Spacer()
         }
     }
 }

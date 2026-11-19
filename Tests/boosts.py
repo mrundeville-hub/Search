@@ -25,9 +25,10 @@ def keep():
     folder = Path(sv.SUPPORT)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "styles.json").write_text(json.dumps({
-        "version": 2,
+        "version": 3,
         "css": {"127.0.0.1": CSS},
         "script": {"127.0.0.1": SCRIPT},
+        "look": {"127.0.0.1": {"background": "", "text": "", "font": "Georgia", "size": 18}},
     }))
 
 
@@ -47,6 +48,19 @@ def main():
         t.ok("a site's own CSS is on its page", background == "rgb(1, 2, 3)", background)
         ran = look(page, "document.body.dataset.boost || ''")
         t.ok("a site's own script has run on its page", ran == "ran", ran)
+        looked = look(page, "getComputedStyle(document.body).fontSize")
+        t.ok("the boost's own type is on the page (18 px, Georgia)", looked == "18px"
+             and "georgia" in look(page, "getComputedStyle(document.body).fontFamily").lower(), looked)
+        t.ok("and the style still wins where it is the site's own",
+             look(page, "getComputedStyle(document.body).backgroundColor") == "rgb(1, 2, 3)")
+
+        # Set through the editor's own path, then read back.
+        changed = sv.cmd({"do": "boost", "action": "look", "site": "127.0.0.1",
+                          "look": {"background": "#0A0B0C"}})
+        t.ok("a look set from the editor is kept and writes its CSS",
+             changed.get("background") == "#0A0B0C" and "background-color: #0A0B0C !important" in changed.get("css", ""),
+             changed)
+
         other = sv.page("plain")
         t.ok("and on the next page of that site too",
              look(other, "document.body.dataset.boost || ''") == "ran")

@@ -4467,8 +4467,24 @@ final class Bench {
                 } catch {
                     answer(["error": error.localizedDescription])
                 }
+            case "look":
+                guard let site = request["site"] as? String else {
+                    answer(["error": "boost look needs a site"])
+                    return
+                }
+                if let said = request["look"] as? [String: Any] {
+                    var look = SiteStyles.shared.look(on: site) ?? BoostLook()
+                    if let background = said["background"] as? String { look.background = background }
+                    if let text = said["text"] as? String { look.text = text }
+                    if let font = said["font"] as? String { look.font = font }
+                    if let size = said["size"] as? Double { look.size = size }
+                    SiteStyles.shared.setLook(look, on: site)
+                }
+                let now = SiteStyles.shared.look(on: site) ?? BoostLook()
+                answer(["background": now.background, "text": now.text, "font": now.font,
+                        "size": now.size ?? 0, "css": now.css()])
             default:
-                answer(["error": "boost needs an action: export or import"])
+                answer(["error": "boost needs an action: export, import or look"])
             }
 
         case "developers":
