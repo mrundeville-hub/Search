@@ -4422,6 +4422,24 @@ final class Bench {
                         "icon": summary?.icon?.absoluteString ?? ""])
             }
 
+        case "calls":
+            // A tab on a call (camera, microphone or screen in use), and the
+            // window a call can go out into (see CallWindow.swift). Test runs
+            // only: it moves a page between windows.
+            guard Store.testing else { answer(["error": "calls only works on a --test run"]); return }
+            switch request["action"] as? String {
+            case "float":
+                guard let tab = find(request, in: browser) else { answer(missing(request)); return }
+                browser.floatCall(tab)
+            case "land":
+                browser.landCall()
+            default:
+                break
+            }
+            answer(["calls": browser.tabs.filter { browser.onCall($0) }.map { Bench.short($0) },
+                    "floatingCall": browser.floatingCall.map { String($0.uuidString.prefix(8)) } ?? "",
+                    "showing": browser.callWindow.showing])
+
         case "developers":
             // What Settings › About › Developer writes for an agent, into a home
             // a test names (see DeveloperSetup.swift). Test runs only: it writes

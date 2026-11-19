@@ -241,6 +241,7 @@ struct Command: Identifiable {
         Command("view.reload", "Reload Page", .view, KeyCombo("r")) { $0.reload() },
         Command("view.userscripts", "Userscripts…", .view, nil) { $0.lead(to: InternalPage(.userscripts)) },
         Command("view.snippets", "Snippets…", .view, nil) { $0.lead(to: InternalPage(.snippets)) },
+        Command("tabs.floatCall", "Float This Call", .tabs, nil) { $0.floatCall() },
         Command("view.reloadOrigin", "Reload Page From Origin", .view, KeyCombo("r", option: true)) { $0.reload(fromOrigin: true) },
         Command("view.reader", "Reading Mode", .view, KeyCombo("r", shift: true)) { $0.toggleReader() },
         Command("view.float", "Float Video", .view, KeyCombo("p", shift: true)) { $0.toggleFloat() },

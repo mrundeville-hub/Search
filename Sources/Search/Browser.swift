@@ -184,6 +184,12 @@ final class Browser: NSObject, ObservableObject {
     /// The tab whose page is currently out in the little window. Nothing
     /// floating means no window: the two are checked against each other rather
     /// than trusted to stay in step.
+    /// The tab whose call is in a window of its own (see CallWindow.swift), if
+    /// one is. Nobody else's: the page is lifted out of the window it was in.
+    @Published private(set) var floatingCall: Tab.ID?
+    /// The call window itself, made when one is first needed.
+    let callWindow = CallWindow()
+
     @Published private(set) var floating: Tab.ID? {
         didSet {
             guard floating == nil, floater.showing else { return }
@@ -6908,6 +6914,53 @@ final class Browser: NSObject, ObservableObject {
             self.landed = nil
             tab?.uncover(landed.picture)
         }
+    }
+
+    /// Whether this tab is on a call: camera, microphone or screen in use.
+    func onCall(_ tab: Tab) -> Bool {
+        guard let web = tab.built else { return false }
+        return StageView.onCall(web)
+    }
+
+    /// The call out in a window of its own, as Yab does for Zoom and Slack.
+    /// The page is lifted as it is: a call site's whole page is the call.
+    func floatCall(_ tab: Tab? = nil) {
+        guard let tab = tab ?? active, let web = tab.built else { return }
+        guard StageView.onCall(web) else {
+            announce("No call is going in this tab")
+            return
+        }
+        if floatingCall == tab.id, callWindow.showing { callWindowReturn(tab); return }
+        // Only one of the two little windows at a time: a video already out
+        // goes back to its tab first.
+        if floating != nil { land() }
+        floatingCall = tab.id
+        tab.floating = true
+        callWindow.onClose = { [weak self] in self?.landCall() }
+        callWindow.onReturn = { [weak self] in self?.callWindowReturn(tab) }
+        callWindow.show(web, from: window)
+    }
+
+    /// Back into its tab.
+    func landCall() {
+        guard let id = floatingCall else { return }
+        floatingCall = nil
+        callWindow.onClose = nil
+        callWindow.onReturn = nil
+        callWindow.hide()
+        if let tab = (tabs + parkedTabs).first(where: { $0.id == id }) {
+            tab.floating = false
+        }
+    }
+
+    /// The window's own button: the call stays out, and its tab comes to the
+    /// front behind it.
+    private func callWindowReturn(_ tab: Tab) {
+        landing.end()
+        if let landing = landed { tab.uncover(landing.picture) }
+        landed = nil
+        landCall()
+        select(tab)
     }
 
     func prepare(_ tab: Tab) {

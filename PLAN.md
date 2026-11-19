@@ -28,7 +28,8 @@ not included in this repo).
 | 2 | ⌥-click a link opens it beside the page (⌥⇧-click for the other side) | `Browser.swift`, `Split.swift` | link click with ⌥ yields a split, ⇧-peek still wins where both are on, `Tests/open_beside.py` |
 | 3 | Link cards: preview on hover/peek without opening | `LinkCard*.swift` | card shows title, address, icon; dismisses on move; no network until asked |
 | 4 | Snippets: expand a trigger in the field and in page text | `Snippet*`, `Substitutions.swift` | round trip through Settings, Raycast/Alfred URL scheme optional |
-| 5 | Spaces: per-space colour + icon, folder from ⌘-click, drag tab into a space | `SpaceIconArt.swift`, `SpaceSettings.swift`, `SpaceDrop.swift` | colour and icon persist; drag-in works on the same data as `Spaces.swift` |
+| 5 | Call window — **done**: `CallWindow.swift`, Tabs › Float This Call, `Browser.floatCall`/`landCall`; the page on a call moves window and keeps running. Left: automatic floating when a call begins | `FloatCall.swift` | a call can be watched in a window of its own while you work elsewhere |
+| 6 | Spaces: per-space colour + icon, folder from ⌘-click, drag tab into a space | `SpaceIconArt.swift`, `SpaceSettings.swift`, `SpaceDrop.swift` | colour and icon persist; drag-in works on the same data as `Spaces.swift` |
 
 ## Phase 1B — agents and MCP
 
