@@ -31,18 +31,18 @@ Legend: ✅ have · 🟡 have, different mechanism · ❌ absent · ❓ unverifi
 | Feature | Search 1.0.15 | Yab 0.50 | Evidence | Phase |
 |---|---|---|---|---|
 | Peek at a link (⇧-click) | ✅ `Peek.swift`, Settings › "Peek at a link" | ✅ `LinkPeek.swift` | `SettingsIndex.swift:477` | — |
-| Open a link **beside** (⌥-click → split) | ❌ tab click ignores ⌥ (`TabBar.swift:863`); Split View opens from the menu only | ✅ `Browser.swift`, `Split.swift`, `DoorList.swift` | grep `besidePage`/`inSplit` | 1A |
+| Open a link **beside** (⌥-click → split) | ✅ `Browser.openLinkBeside(_:from:)` — *"A link ⌥-clicked: in a tab of its own beside the page it came from"* (`Browser.swift:6229`), `openInSplit` (`:6221`, `:4277`) | ✅ same lineage | `Sources/Search/Browser.swift:6229` | — |
 | Pins, folders, spaces | 🟡 `Pins.swift`, `PinFolders.swift`, `Spaces.swift`, `SpaceGradient.swift` | ✅ plus `SharedPins.swift`, `SpaceIconArt.swift` (Ionicons), folder-from-⌘-click, "New Tab in Folder", drag tab into another space | `Sources/Fast/Space*.swift` | 1A |
 | Keep folders up to date, check at 9 | 🟡 `LiveFolders.swift` | ✅ `LiveFolderSettings.swift`, scheduled check | both trees | 1A |
 | Link cards (preview before opening) | ❌ | ✅ `LinkCard.swift`, `LinkCardLoad.swift`, `LinkCardScript.swift` (3 files, 940 lines) | file listing | 1A |
-| Tidy (clear the tab row) | ❌ | ✅ `Tidy.swift`, `TidyTabs.swift` (2 files, 700 lines) | file listing | 1A |
-| Snippets (text expansion, Raycast/Alfred) | 🟡 `Substitutions.swift` — verify scope | ✅ `Snippet*` (3 files, 1450 lines) | grep both | 1A ❓ |
-| Call window for Zoom/Slack, PiP on leaving | ❌ (only `NativePiP.swift`, `DownloadsFloat.swift`) | ✅ `FloatCall.swift` (1 file, 1075 lines), `Float*.swift` | file listing | later |
+| Tidy: tabs close themselves after being left alone | ✅ **same feature, different name** — `Closing.swift` ("Tabs that close themselves, as in Arc": 12 h / day / week / month, keeps on-screen, pinned, named, grouped, busy; archives for a month, ⇧⌘T brings back) | ✅ `Tidy.swift`, `TidyTabs.swift` (2 files, 700 lines) | `Sources/Search/Closing.swift:1-26` | — |
+| Snippets (text expansion, Raycast/Alfred) | ❓ `Substitutions.swift` — no snippet hits in Search (`grep -i snippet` only reaches a regex in `Forms.swift`) | ✅ `Snippet*` (3 files, 1450 lines) | grep both | 1A ❓ |
+| Call window for Zoom/Slack, PiP on leaving | ❌ no call detection (`grep -i "getUserMedia\|WebRTC"` finds only the extension shim); `Float.swift`, `DownloadsFloat.swift`, `NativePiP.swift` cover floating video only | ✅ `FloatCall.swift` (1 file, 1075 lines), `Float*.swift` | grep both | later |
 | Wrapped (year in review) | ❌ | ✅ `Wrapped*` (10 files, 2729 lines) | file listing | later |
 | Smart ⌘T ("what's next": meeting, mail, last tab) | 🟡 `Omnibox.swift`, `Fuzzy.swift`, `Recall.swift` — no calendar/mail sources | ✅ field + mail + calendar sources | file listing | later |
 | Tabs across the top / down the left | ✅ `TabBar.swift` (⇧⌘S) | ✅ | READMEs | — |
 | Split View, pinned splits | ✅ `SplitView.swift`, `Split.swift` | ✅ plus pinning a split | both trees | — |
-| PDF fill & sign | ❌ | ✅ `PDFDesk*` (10 files) | file listing | later |
+| PDF fill & sign | ❌ `Snap.swift` only rasterises a PDF page; no form fields | ✅ `PDFDesk*` (10 files) | grep both | later |
 | Translate | ✅ `Translate.swift` | ❌ | file listing | — (Search ahead) |
 
 ## B. Agents and MCP
@@ -60,7 +60,7 @@ Legend: ✅ have · 🟡 have, different mechanism · ❌ absent · ❓ unverifi
 
 | Feature | Search 1.0.15 | Yab 0.50 | Evidence | Phase |
 |---|---|---|---|---|
-| Boosts (per-site CSS/JS, colors, fonts, hidden blocks, share/import) | ❌ `SiteStyles.swift` only reaches what the site ships; no user editor | ✅ `Boost*.swift` (34 files, 6450 lines), `ArcBoosts.swift`, `BoostCLI.swift`, `BoostEditor*` | file listing | 1C |
+| Boosts | 🟡 **CSS-only half exists**: `SiteStyles.swift` — *"Your own style for a site, as Arc's Boosts are: CSS you write"*, View › Edit Site Style…, kept per site in `styles.json`, applied before first paint, live as you type | ✅ plus **JS in a boost**, colours/fonts/spacing UI, hidden blocks, catalog, sharing, `BoostAI`, `BoostCLI` (34 files, 6450 lines) | `Sources/Search/SiteStyles.swift:1-14`, `SettingsIndex.swift:348` | 1C |
 | Userscripts (Tampermonkey-style managers) | ❌ `Scripting.swift` (102 lines) is internal injection only | ✅ `Userscript*.swift` (6 files, 2938 lines), `UserscriptRuntime.swift` | file listing | 1C |
 | Chrome extensions (WebKit + shims) | ✅ `Extensions*.swift` (18 files), `Crx.swift`, `ExtensionShims*` | ✅ (61 files, incl. Chromium) | both trees | — |
 | Chrome DevTools | 🟡 `Inspector.swift` (WebKit Web Inspector) | ✅ `ChromiumDevTools.swift`, `DevTools*` | file listing | with Chromium |
@@ -74,12 +74,21 @@ Legend: ✅ have · 🟡 have, different mechanism · ❌ absent · ❓ unverifi
 
 ## Port order (small, self-contained first)
 
+Corrected after checking the port order against Search's own source: Tidy (`Closing.swift`) and
+⌥-click open-beside (`Browser.openLinkBeside`) are already there, and Boosts exist in CSS-only
+form, so the first port is userscripts.
+
 | # | Item | Yab source | Size | Why first |
 |---|---|---|---|---|
-| 1 | Tidy | `Tidy.swift`, `TidyTabs.swift` | 700 lines | teaches the port workflow on UI-only code |
-| 2 | Open a link beside (⌥-click) | `Browser.swift` + `Split.swift` + `DoorList.swift` | small, spread | most visible missing everyday gesture |
-| 3 | Link cards | `LinkCard*.swift` | 940 lines | self-contained view + one script |
-| 4 | Snippets | `Snippet*` | 1450 lines | shares `Substitutions.swift` ground |
-| 5 | MCP server inside the app + tool domains | `Mcp*.swift`, `McpTools*.swift` | 3052 lines | flagship: agents drive the fork, adapters over `AgentControl.swift` |
-| 6 | Userscripts | `Userscript*.swift` | 2938 lines | needs `Scripting.swift` |
-| 7 | Boosts | `Boost*.swift` | 6450 lines | biggest; needs editor, catalog, sharing |
+| 1 | Userscripts: install from URL, manage, run per site | `Userscript.swift`, `Userscripts.swift`, `UserscriptRuntime.swift`, `UserscriptViews.swift`, `UserscriptMove.swift` | 2938 lines, 6 files | genuinely absent; `Tab.swift` already builds `WKUserScript`s, so the hook exists |
+| 2 | Boosts, the rest: JS in a boost, the editor's colours/fonts/hidden blocks, sharing | `Boost*.swift` | 6450 lines, 34 files | builds on `SiteStyles.swift` |
+| 3 | Link cards (preview on hover) | `LinkCard*.swift` | 940 lines | self-contained view + one script; `HoveredLink` already reports the destination |
+| 4 | Chat column with the assistant | `Chat*.swift` | 29 files | sits beside `AIAssist.swift` |
+| 5 | In-app MCP server + wider tool domains | `Mcp*.swift`, `McpTools*.swift` | 3052 lines | extends `search-mcp`/`AgentControl.swift` |
+
+## Corrections to this document
+
+2026-11-20, after the first port attempt: three rows above were wrong because the first pass went
+by file names instead of behaviour — `Closing.swift` is Tidy, `Browser.openLinkBeside` is ⌥-click
+open-beside, and `SiteStyles.swift` is Boosts (CSS only). Every remaining ❌ was then re-checked
+with a behaviour `grep`, not a file-name match.
