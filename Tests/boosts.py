@@ -28,7 +28,8 @@ def keep():
         "version": 3,
         "css": {"127.0.0.1": CSS},
         "script": {"127.0.0.1": SCRIPT},
-        "look": {"127.0.0.1": {"background": "", "text": "", "font": "Georgia", "size": 18}},
+        "look": {"127.0.0.1": {"background": "", "text": "", "font": "Georgia", "size": 18,
+                               "lineHeight": 1.6, "paragraphSpacing": 10}},
     }))
 
 
@@ -51,6 +52,12 @@ def main():
         looked = look(page, "getComputedStyle(document.body).fontSize")
         t.ok("the boost's own type is on the page (18 px, Georgia)", looked == "18px"
              and "georgia" in look(page, "getComputedStyle(document.body).fontFamily").lower(), looked)
+        spaced = look(page, "getComputedStyle(document.body).lineHeight")
+        # WebKit answers 28.799999px for 1.6 of 18: the number, to a tenth.
+        height = float(spaced.replace("px", "")) if spaced.endswith("px") else 0
+        t.ok("its line height is on the page too (1.6 of 18 px)", abs(height - 28.8) < 0.15, spaced)
+        gap = look(page, "getComputedStyle(document.querySelector('p')).marginBlockStart")
+        t.ok("and the room around a paragraph", gap.startswith("10px"), gap)
         t.ok("and the style still wins where it is the site's own",
              look(page, "getComputedStyle(document.body).backgroundColor") == "rgb(1, 2, 3)")
 

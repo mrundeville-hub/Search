@@ -467,6 +467,48 @@ struct LookControls: View {
                 Spacer()
             }
             HStack(spacing: 8) {
+                Text("Lines")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 56, alignment: .leading)
+                Toggle("", isOn: Binding(
+                    get: { look.lineHeight != nil },
+                    set: { look.lineHeight = $0 ? 1.5 : nil }))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                Stepper(value: Binding(
+                    get: { look.lineHeight ?? 1.5 },
+                    set: { look.lineHeight = min(max(($0 * 10).rounded() / 10, 1), 2.5) }),
+                        in: 1...2.5, step: 0.1) {
+                    Text(look.lineHeight.map { String(format: "%.1f", $0) } ?? "the site's own")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.muted)
+                }
+                .disabled(look.lineHeight == nil)
+                Spacer()
+            }
+            HStack(spacing: 8) {
+                Text("Paragraphs")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 56, alignment: .leading)
+                Toggle("", isOn: Binding(
+                    get: { look.paragraphSpacing != nil },
+                    set: { look.paragraphSpacing = $0 ? 12 : nil }))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                Stepper(value: Binding(
+                    get: { look.paragraphSpacing ?? 12 },
+                    set: { look.paragraphSpacing = min(max($0.rounded(), 0), 24) }),
+                        in: 0...24, step: 2) {
+                    Text(look.paragraphSpacing.map { "\(Int($0)) px" } ?? "the site's own")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.muted)
+                }
+                .disabled(look.paragraphSpacing == nil)
+                Spacer()
+            }
+            HStack(spacing: 8) {
                 Text("Text size")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Palette.ink)

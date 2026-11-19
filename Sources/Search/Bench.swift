@@ -4478,11 +4478,14 @@ final class Bench {
                     if let text = said["text"] as? String { look.text = text }
                     if let font = said["font"] as? String { look.font = font }
                     if let size = said["size"] as? Double { look.size = size }
+                    if let height = said["lineHeight"] as? Double { look.lineHeight = height }
+                    if let spacing = said["paragraphSpacing"] as? Double { look.paragraphSpacing = spacing }
                     SiteStyles.shared.setLook(look, on: site)
                 }
                 let now = SiteStyles.shared.look(on: site) ?? BoostLook()
                 answer(["background": now.background, "text": now.text, "font": now.font,
-                        "size": now.size ?? 0, "css": now.css()])
+                        "size": now.size ?? 0, "lineHeight": now.lineHeight ?? 0,
+                        "paragraphSpacing": now.paragraphSpacing ?? 0, "css": now.css()])
             default:
                 answer(["error": "boost needs an action: export, import or look"])
             }

@@ -18,9 +18,14 @@ struct BoostLook: Codable, Equatable {
     var font: String = ""
     /// The root font size in points; nil for the site's own.
     var size: Double? = nil
+    /// The distance between lines, as a multiple of the text's size.
+    var lineHeight: Double? = nil
+    /// The room around a paragraph, in points.
+    var paragraphSpacing: Double? = nil
 
     var isEmpty: Bool {
         background.isEmpty && text.isEmpty && font.isEmpty && size == nil
+            && lineHeight == nil && paragraphSpacing == nil
     }
 
     /// The fonts offered, as a person reads them: the Mac's own five families
@@ -42,8 +47,17 @@ struct BoostLook: Codable, Equatable {
         if let size, size >= 8, size <= 32 {
             rules.append("font-size: \(Int(size.rounded()))px;")
         }
-        guard !rules.isEmpty else { return "" }
-        return "html, body { \(rules.joined(separator: " ")) }"
+        if let lineHeight, lineHeight >= 1, lineHeight <= 2.5 {
+            rules.append("line-height: \(String(format: "%.2f", lineHeight));")
+        }
+        var text = ""
+        if !rules.isEmpty { text = "html, body { \(rules.joined(separator: " ")) }" }
+        // Paragraphs have their own room, which the root rule can't reach.
+        if let spacing = paragraphSpacing, spacing >= 0, spacing <= 24 {
+            let room = Int(spacing.rounded())
+            text += (text.isEmpty ? "" : "\n") + "p, li { margin-block: \(room)px; }"
+        }
+        return text
     }
 
     /// A colour from a picker, as a hex string; nil and blank both mean "the

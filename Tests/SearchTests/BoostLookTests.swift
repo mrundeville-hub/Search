@@ -20,6 +20,20 @@ final class BoostLookTests: XCTestCase {
         XCTAssertTrue(css.contains("font-size: 18px;"))
     }
 
+    func testLinesAndParagraphsWriteTheirOwnRules() {
+        let look = BoostLook(lineHeight: 1.6, paragraphSpacing: 10)
+        let css = look.css()
+        XCTAssertTrue(css.contains("line-height: 1.60;"))
+        XCTAssertTrue(css.contains("p, li { margin-block: 10px; }"))
+        XCTAssertTrue(css.hasPrefix("html, body {"), "the root rule comes first")
+
+        XCTAssertFalse(BoostLook(lineHeight: 0.5).css().contains("line-height"))
+        XCTAssertFalse(BoostLook(lineHeight: 9).css().contains("line-height"))
+        XCTAssertFalse(BoostLook(paragraphSpacing: 40).css().contains("margin-block"))
+        XCTAssertEqual(BoostLook(paragraphSpacing: 0).css(), "p, li { margin-block: 0px; }",
+                       "no room at all is a choice, not nothing")
+    }
+
     func testASizeOutOfRangeIsNotWritten() {
         XCTAssertFalse(BoostLook(size: 4).css().contains("font-size"))
         XCTAssertFalse(BoostLook(size: 400).css().contains("font-size"))
