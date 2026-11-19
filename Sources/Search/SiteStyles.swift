@@ -314,10 +314,7 @@ struct StylePanel: View {
                 // including what has just been typed and not yet committed.
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Pill("Share…") { share() }
-                    Pill("Copy") {
-                        StylePanel.write(text, half: half, on: host)
-                        if let boost = SiteStyles.shared.boost(on: host) { BoostSharing.copy(boost) }
-                    }
+                    Pill("Copy") { copy() }
                 }
                 Spacer()
             }
@@ -407,8 +404,23 @@ struct StylePanel: View {
     /// what is on the page rather than the last committed letter.
     private func share() {
         StylePanel.write(text, half: half, on: host)
-        guard let boost = SiteStyles.shared.boost(on: host) else { return }
+        guard var boost = SiteStyles.shared.boost(on: host) else { return }
+        let veils = browser.curtain.veils(on: host)
+        if !veils.isEmpty {
+            boost.hidden = veils.map { BoostFile.Hidden(selector: $0.selector, label: $0.label) }
+        }
         BoostSharing.save(boost, from: browser.window)
+    }
+
+    /// The same, on the clipboard.
+    private func copy() {
+        StylePanel.write(text, half: half, on: host)
+        guard var boost = SiteStyles.shared.boost(on: host) else { return }
+        let veils = browser.curtain.veils(on: host)
+        if !veils.isEmpty {
+            boost.hidden = veils.map { BoostFile.Hidden(selector: $0.selector, label: $0.label) }
+        }
+        BoostSharing.copy(boost)
     }
 
     private func close() {
@@ -422,6 +434,7 @@ struct StylePanel: View {
 /// take off for good. Their styles are kept while the switch is off.
 struct SiteStylesControl: View {
     @ObservedObject var prefs: Preferences
+    @ObservedObject var browser: Browser
     @ObservedObject private var styles = SiteStyles.shared
 
     var body: some View {
@@ -437,7 +450,11 @@ struct SiteStylesControl: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
-            Pill("Bring in…") { _ = BoostSharing.bring(inFrom: nil, into: styles) }
+            Pill("Bring in…") {
+                _ = BoostSharing.bring(inFrom: nil, into: styles,
+                                       curtain: browser.curtain,
+                                       reapply: { browser.applyHidden(on: $0) })
+            }
             Switch(on: $prefs.sitesStyles)
         }
     }

@@ -93,6 +93,22 @@ def main():
         t.ok("and is there afterwards, both halves",
              round_trip["css"] == "h1 { color: teal }" and round_trip["script"] == "window.__shared = 1;", round_trip)
 
+        # A boost can carry what a site has hidden, and bring it when it comes in.
+        hidden_file = folder / "hides.boost"
+        hidden_file.write_text(json.dumps({
+            "format": "search-boost", "version": 1, "site": "127.0.0.1",
+            "hidden": [{"selector": "p", "label": "the paragraph"}]}))
+        brought_hidden = sv.cmd({"do": "boost", "action": "import", "path": str(hidden_file)})
+        t.ok("a boost with a hidden block brings it", brought_hidden.get("hidden") == 1, brought_hidden)
+        t.ok("and the page that is open hides it at once",
+             look(page, "getComputedStyle(document.querySelector('p')).display") == "none",
+             look(page, "getComputedStyle(document.querySelector('p')).display"))
+
+        shared_hidden = sv.cmd({"do": "boost", "action": "export", "site": "127.0.0.1",
+                                "path": str(folder / "after.boost")})
+        t.ok("and the site's own share carries it after that",
+             shared_hidden.get("hidden") == 1, shared_hidden)
+
         bad = folder / "bad.boost"
         bad.write_text('{"format": "search-boost", "site": "a.com", "css": "  "}')
         try:

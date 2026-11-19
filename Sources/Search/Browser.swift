@@ -6928,6 +6928,17 @@ final class Browser: NSObject, ObservableObject {
         return StageView.onCall(web)
     }
 
+    /// Puts a site's hidden things on the pages of it that are open: for a
+    /// change that came from outside the picking, an imported boost's.
+    func applyHidden(on host: String) {
+        let css = curtain.css(on: host)
+        for tab in tabs + parkedTabs where !tab.shy && !tab.bench {
+            guard curtain.host(of: tab.address) == host, tab.built != nil else { continue }
+            tab.arm(hiding: css)
+            tab.applyVeils(css)
+        }
+    }
+
     /// Watches for a call while the setting says to, and puts it out in a window
     /// of its own as it starts — Yab's habit. Off, the timer is not running at
     /// all: nothing polls a page nobody asked about.

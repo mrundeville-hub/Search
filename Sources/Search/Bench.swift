@@ -4448,14 +4448,19 @@ final class Bench {
             switch request["action"] as? String {
             case "export":
                 guard let site = request["site"] as? String,
-                      let boost = SiteStyles.shared.boost(on: site) else {
+                      var boost = SiteStyles.shared.boost(on: site) else {
                     answer(["error": "nothing to share for that site"])
                     return
+                }
+                let veils = browser.curtain.veils(on: site)
+                if !veils.isEmpty {
+                    boost.hidden = veils.map { BoostFile.Hidden(selector: $0.selector, label: $0.label) }
                 }
                 guard let path else { answer(["error": "boost export needs a path"]); return }
                 do {
                     try boost.json().write(to: path, atomically: true, encoding: .utf8)
-                    answer(["written": path.path, "site": boost.site, "text": boost.json()])
+                    answer(["written": path.path, "site": boost.site, "text": boost.json(),
+                        "hidden": boost.hidden?.count ?? 0])
                 } catch {
                     answer(["error": error.localizedDescription])
                 }
@@ -4463,7 +4468,14 @@ final class Bench {
                 guard let path else { answer(["error": "boost import needs a path"]); return }
                 do {
                     let boost = try BoostFile.read(at: path)
-                    answer(["said": SiteStyles.shared.bring(in: boost), "site": boost.site])
+                    var said = SiteStyles.shared.bring(in: boost)
+                    var hidden = 0
+                    if let list = boost.hidden {
+                        hidden = BoostSharing.hide(list, on: boost.site, curtain: browser.curtain,
+                                                   reapply: { browser.applyHidden(on: $0) })
+                        if hidden > 0 { said += ", \(hidden) hidden" }
+                    }
+                    answer(["said": said, "site": boost.site, "hidden": hidden])
                 } catch {
                     answer(["error": error.localizedDescription])
                 }

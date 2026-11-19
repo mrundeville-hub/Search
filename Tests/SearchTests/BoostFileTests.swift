@@ -76,3 +76,43 @@ final class BoostFileTests: XCTestCase {
         XCTAssertEqual(styles.writtenScript(on: "a.example"), "")
     }
 }
+
+/// A boost's hidden things: they travel in the file, and they are put back
+/// only from selectors shaped like selectors.
+final class BoostHiddenTests: XCTestCase {
+    func testHiddenBlocksTravelAndAreTidied() throws {
+        let text = """
+        {"format": "search-boost", "site": "example.com",
+         "css": "body { color: red }",
+         "hidden": [{"selector": "  div.ad  ", "label": "An ad"},
+                    {"selector": "", "label": "nothing"},
+                    {"selector": "p { color: blue }", "label": "markup, not a selector"}]}
+        """
+        let boost = try BoostFile.read(Data(text.utf8))
+        XCTAssertEqual(boost.hidden?.count, 1, "one shaped like a selector survives")
+        XCTAssertEqual(boost.hidden?.first?.selector, "div.ad", "trimmed")
+        XCTAssertEqual(boost.hidden?.first?.label, "An ad")
+
+        let again = try BoostFile.read(Data(boost.json().utf8))
+        XCTAssertEqual(again.hidden, boost.hidden, "the file carries them back")
+    }
+
+    func testHiddenAloneIsStillABoost() throws {
+        // ## … ## because the selector itself holds a "#".
+        let boost = try BoostFile.read(Data(##"{"format":"search-boost","site":"a.example","hidden":[{"selector":"div#x"}]}"##.utf8))
+        XCTAssertFalse(boost.isEmpty)
+        XCTAssertEqual(boost.hidden?.first?.label, "", "a label is nice, not required")
+    }
+
+    @MainActor
+    func testBringingAHiddenBlockInReplacesNothingAndApplies() throws {
+        let curtain = Curtain()
+        var reapplied: [String] = []
+        let count = BoostSharing.hide([.init(selector: "div.test-\(UUID().uuidString)", label: "Test")],
+                                      on: "bringin-\(UUID().uuidString).example",
+                                      curtain: curtain,
+                                      reapply: { reapplied.append($0) })
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(reapplied.count, 1, "the pages that are open are told")
+    }
+}

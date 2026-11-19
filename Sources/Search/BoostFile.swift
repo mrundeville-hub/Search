@@ -32,12 +32,35 @@ struct BoostFile: Codable, Equatable {
     var script: String = ""
     /// The colours and type chosen for the site, when there are any.
     var look: BoostLook? = nil
+    /// What is hidden on the site, by selector: ⇧⌘H's work, so a shared boost
+    /// brings the site quiet as well as pretty.
+    var hidden: [Hidden]? = nil
 
-    init(site: String, css: String = "", script: String = "", look: BoostLook? = nil) {
+    struct Hidden: Codable, Equatable {
+        var selector: String
+        var label: String = ""
+
+        init(selector: String, label: String = "") {
+            self.selector = selector
+            self.label = label
+        }
+
+        /// A label is nice and a selector is required: a file written by hand
+        /// usually has only the second.
+        init(from decoder: Decoder) throws {
+            let box = try decoder.container(keyedBy: CodingKeys.self)
+            selector = try box.decode(String.self, forKey: .selector)
+            label = try box.decodeIfPresent(String.self, forKey: .label) ?? ""
+        }
+    }
+
+    init(site: String, css: String = "", script: String = "", look: BoostLook? = nil,
+         hidden: [Hidden]? = nil) {
         self.site = site
         self.css = css
         self.script = script
         self.look = look
+        self.hidden = hidden
     }
 
     /// A file from a person's hand needn't carry every key: what it doesn't say
@@ -50,6 +73,7 @@ struct BoostFile: Codable, Equatable {
         css = try box.decodeIfPresent(String.self, forKey: .css) ?? ""
         script = try box.decodeIfPresent(String.self, forKey: .script) ?? ""
         look = try box.decodeIfPresent(BoostLook.self, forKey: .look)
+        hidden = try box.decodeIfPresent([Hidden].self, forKey: .hidden)
     }
 
     /// Whether either half has anything in it.
@@ -57,6 +81,7 @@ struct BoostFile: Codable, Equatable {
         css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (look?.isEmpty ?? true)
+            && (hidden?.isEmpty ?? true)
     }
 
     struct Invalid: LocalizedError {
@@ -82,10 +107,15 @@ struct BoostFile: Codable, Equatable {
         guard !site.contains("/"), !site.contains(" "), !site.contains(":"), site.contains(".") else {
             throw Invalid("“\(site)” isn't a site: a boost is for a host, like example.com.")
         }
-        guard !boost.isEmpty else { throw Invalid("That boost has nothing in it.") }
+        let hidden = (boost.hidden ?? [])
+            .map { Hidden(selector: $0.selector.trimmingCharacters(in: .whitespacesAndNewlines),
+                          label: String($0.label.prefix(200))) }
+            .filter { !$0.selector.isEmpty && !$0.selector.contains("{") && $0.selector.count <= 400 }
+        guard !boost.isEmpty || !hidden.isEmpty else { throw Invalid("That boost has nothing in it.") }
         return BoostFile(site: site.hasPrefix("www.") ? String(site.dropFirst(4)) : site,
                          css: boost.css, script: boost.script,
-                         look: boost.look.flatMap { $0.isEmpty ? nil : $0 })
+                         look: boost.look.flatMap { $0.isEmpty ? nil : $0 },
+                         hidden: hidden.isEmpty ? nil : hidden)
     }
 
     static func read(at url: URL) throws -> BoostFile {
@@ -176,9 +206,25 @@ enum BoostSharing {
         NSPasteboard.general.setString(boost.json(), forType: .string)
     }
 
-    /// Reads one the person picks and puts it on its site. Answers what it did,
-    /// or why it didn't.
-    static func bring(inFrom window: NSWindow?, into styles: SiteStyles) -> String? {
+    /// Puts a boost's hidden things on its site, through the curtain that keeps
+    /// them, and asks the browser to put them on the pages that are open.
+    @discardableResult
+    static func hide(_ hidden: [BoostFile.Hidden], on site: String, curtain: Curtain,
+                     reapply: (String) -> Void) -> Int {
+        var count = 0
+        for one in hidden {
+            let before = curtain.veils(on: site).count
+            curtain.hide(one.selector, label: one.label, note: "from a boost", on: site)
+            if curtain.veils(on: site).count > before { count += 1 }
+        }
+        if count > 0 { reapply(site) }
+        return count
+    }
+
+    /// Reads one the person picks and puts it on its site, hidden things and
+    /// all when it is given the curtain to put them through.
+    static func bring(inFrom window: NSWindow?, into styles: SiteStyles,
+                      curtain: Curtain? = nil, reapply: ((String) -> Void)? = nil) -> String? {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
@@ -187,7 +233,13 @@ enum BoostSharing {
         panel.message = "A .boost file: one site's style and script."
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
-            return styles.bring(in: try BoostFile.read(at: url))
+            let boost = try BoostFile.read(at: url)
+            var said = styles.bring(in: boost)
+            if let curtain, let reapply, let hidden = boost.hidden {
+                let count = hide(hidden, on: boost.site, curtain: curtain, reapply: reapply)
+                if count > 0 { said += ", and \(count) block\(count == 1 ? "" : "s") hidden" }
+            }
+            return said
         } catch {
             NSAlert(error: error).runModal()
             return nil
