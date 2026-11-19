@@ -2,16 +2,17 @@ import Combine
 import Foundation
 import SwiftUI
 
-// Your own style for a site, as Arc's Boosts are: CSS you write, put on
-// every page of that site. CSS only — Search never runs script you type
-// into a page.
+// Your own style for a site, as Arc's Boosts are, and Yab's: CSS you write,
+// put on every page of that site, and a script if you want one — the CSS goes
+// in before the page has drawn, the script runs once its document is there.
+// The script is yours and runs in the page's own world: that is what a boost
+// is for. Nothing else in Search runs script you type into a page.
 //
 // Off until Settings › Browsing › Pages › Your own style for a site. Then
 // View › Edit Site Style… writes the site you're on, and what you type is on
 // the page as you type it. Kept by site the way hidden elements are (no
-// www.), in styles.json beside hidden.json, and put in the same way: a
-// stylesheet before the page has drawn, so nothing is seen changing. Turning
-// the setting off takes every style off the pages and keeps them all.
+// www.), in styles.json beside hidden.json. Turning the setting off takes
+// every style and script off the pages and keeps them all.
 
 @MainActor
 final class SiteStyles: ObservableObject {
@@ -26,6 +27,8 @@ final class SiteStyles: ObservableObject {
     }
 
     @Published private(set) var byHost: [String: String] = [:]
+    /// The script half of a boost, by the same host. Empty for most sites.
+    @Published private(set) var scriptByHost: [String: String] = [:]
 
     /// A site whose style changed, for every window to pass on to its open
     /// pages of that site; nil for all of them, when the switch moved.
@@ -49,10 +52,19 @@ final class SiteStyles: ObservableObject {
         return css
     }
 
+    /// The script half, for a page of this site: nothing while the setting is
+    /// off, as with the style.
+    func script(on host: String?) -> String? {
+        guard on, let host, let script = scriptByHost[host], !script.isEmpty else { return nil }
+        return script
+    }
+
     /// What was written for a site, on or off.
     func written(on host: String) -> String { byHost[host] ?? "" }
+    func writtenScript(on host: String) -> String { scriptByHost[host] ?? "" }
 
-    var hosts: [String] { byHost.keys.sorted() }
+    /// Every site with a style or a script.
+    var hosts: [String] { Set(byHost.keys).union(scriptByHost.keys).sorted() }
 
     /// Nothing but whitespace is no style at all, and the site is forgotten.
     func set(_ css: String, on host: String) {
@@ -63,7 +75,20 @@ final class SiteStyles: ObservableObject {
         changed.send(host)
     }
 
-    func remove(on host: String) { set("", on: host) }
+    /// The script half. Nothing but whitespace takes it off again.
+    func setScript(_ script: String, on host: String) {
+        let kept = script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : script
+        guard scriptByHost[host] != kept else { return }
+        scriptByHost[host] = kept
+        save()
+        changed.send(host)
+    }
+
+    /// Both halves, for good.
+    func remove(on host: String) {
+        set("", on: host)
+        setScript("", on: host)
+    }
 
     // MARK: - into the page
 
@@ -96,6 +121,12 @@ final class SiteStyles: ObservableObject {
     /// never part of the source (see Tab.callInSearch).
     static let live = "(\(apply))(css);"
 
+    /// The script half, once the document is there: wrapped so a mistake in
+    /// yours is a line in the console rather than a page that stops halfway.
+    static func scriptCode(_ script: String) -> String {
+        "(function () { try {\n" + script + "\n} catch (e) { console.error('Search boost:', e); } })();"
+    }
+
     /// A JavaScript string literal: JSON's, with the two line separators and
     /// `<` spelled out as well.
     static func literal(_ text: String) -> String {
@@ -110,11 +141,23 @@ final class SiteStyles: ObservableObject {
 
     // MARK: - the file
 
+    /// What `styles.json` holds: the two halves by host, under a version so a
+    /// file from before the script half still reads. Written before that as
+    /// one plain `[host: css]`, which is still the style half.
+    private struct Kept: Codable {
+        var version: Int
+        var css: [String: String]
+        var script: [String: String]
+    }
+
     private func load() {
-        guard let data = try? Data(contentsOf: file),
-              let stored = try? JSONDecoder().decode([String: String].self, from: data)
-        else { return }
-        byHost = stored
+        guard let data = try? Data(contentsOf: file) else { return }
+        if let stored = try? JSONDecoder().decode(Kept.self, from: data) {
+            byHost = stored.css
+            scriptByHost = stored.script
+            return
+        }
+        if let old = try? JSONDecoder().decode([String: String].self, from: data) { byHost = old }
     }
 
     /// Typing writes a few times a second; the file is written once it stops.
@@ -124,16 +167,16 @@ final class SiteStyles: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
             saving = false
-            let snapshot = byHost
+            let snapshot = Kept(version: 2, css: byHost, script: scriptByHost)
             let file = file
             DispatchQueue.global(qos: .utility).async { Self.write(snapshot, to: file) }
         }
     }
 
     /// Now rather than in a moment, for a test.
-    func writeNow() { Self.write(byHost, to: file) }
+    func writeNow() { Self.write(Kept(version: 2, css: byHost, script: scriptByHost), to: file) }
 
-    nonisolated private static func write(_ styles: [String: String], to file: URL) {
+    nonisolated private static func write(_ styles: Kept, to file: URL) {
         guard let data = try? JSONEncoder().encode(styles) else { return }
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
@@ -145,9 +188,22 @@ final class SiteStyles: ObservableObject {
 /// Its bottom corner, away from the corner it hangs from, makes it larger
 /// or smaller, the editor taking the room; the size is kept for next time.
 struct StylePanel: View {
+    /// Which half is being written: the stylesheet, or the script beside it.
+    enum Half: Hashable, CaseIterable {
+        case css, script
+
+        var title: String {
+            switch self {
+            case .css: return "CSS"
+            case .script: return "Script"
+            }
+        }
+    }
+
     @ObservedObject var browser: Browser
     let host: String
 
+    @State private var half: Half = .css
     @State private var text = ""
     @State private var pending: DispatchWorkItem?
     @FocusState private var typing: Bool
@@ -195,7 +251,13 @@ struct StylePanel: View {
         let shown = CGSize(width: min(size.width, most.width), height: min(size.height, most.height))
         return Plate(host, width: shown.width, close: close) {
             VStack(alignment: .leading, spacing: 6) {
-                Caption("CSS for every page of this site")
+                HStack(spacing: 10) {
+                    Segmented(options: Half.allCases.map { ($0, $0.title) }, selection: $half)
+                    Caption(half == .css
+                            ? "CSS for every page of this site"
+                            : "Script for every page, run once its document is there")
+                    Spacer()
+                }
                 TextEditor(text: $text)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Palette.ink)
@@ -224,9 +286,19 @@ struct StylePanel: View {
             // A moment after the last key, so a half-typed rule isn't sent
             // to every open page of the site on each letter.
             pending?.cancel()
-            let work = DispatchWorkItem { SiteStyles.shared.set(now, on: host) }
+            let name = half
+            let work = DispatchWorkItem { StylePanel.write(now, half: name, on: host) }
             pending = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
+        .onChange(of: half) { _, now in
+            // Half-typed in one, and now the other: what was typed stays.
+            pending?.cancel()
+            let leaving = now == .css ? Half.script : Half.css
+            StylePanel.write(text, half: leaving, on: host)
+            text = now == .css ? SiteStyles.shared.written(on: host)
+                                : SiteStyles.shared.writtenScript(on: host)
+            typing = true
         }
     }
 
@@ -269,9 +341,17 @@ struct StylePanel: View {
         return .crosshair
     }
 
+    /// One half of the boost, into the store the site is kept in.
+    static func write(_ text: String, half: Half, on host: String) {
+        switch half {
+        case .css: SiteStyles.shared.set(text, on: host)
+        case .script: SiteStyles.shared.setScript(text, on: host)
+        }
+    }
+
     private func close() {
         pending?.cancel()
-        SiteStyles.shared.set(text, on: host)
+        StylePanel.write(text, half: half, on: host)
         browser.styling = nil
     }
 }
@@ -288,7 +368,7 @@ struct SiteStylesControl: View {
                 Menu(styles.hosts.count == 1 ? "1 site" : "\(styles.hosts.count) sites") {
                     ForEach(styles.hosts, id: \.self) { host in
                         Menu(host) {
-                            Button("Remove Style") { styles.remove(on: host) }
+                            Button("Remove Style and Script") { styles.remove(on: host) }
                         }
                     }
                 }

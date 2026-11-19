@@ -1249,6 +1249,12 @@ final class Tab: ObservableObject, Identifiable {
         if let style = SiteStyles.shared.css(on: SiteStyles.host(of: url ?? pageAddress)) {
             add(SiteStyles.script(style), .atDocumentStart, mainFrameOnly: true, in: Web.world)
         }
+        // The script half of a boost for this site, once its document is
+        // there, in the page's own world because that is the point of it (see
+        // SiteStyles.swift).
+        if let boost = SiteStyles.shared.script(on: SiteStyles.host(of: url ?? pageAddress)) {
+            add(SiteStyles.scriptCode(boost), .atDocumentEnd, mainFrameOnly: true, in: .page)
+        }
         // Userscripts that asked for this address, in the page's own world so
         // they can reach the page's own globals, the way a `@grant none` script
         // runs in Tampermonkey (see Userscripts.swift).

@@ -60,7 +60,7 @@ Legend: ✅ have · 🟡 have, different mechanism · ❌ absent · ❓ unverifi
 
 | Feature | Search 1.0.15 | Yab 0.50 | Evidence | Phase |
 |---|---|---|---|---|
-| Boosts | 🟡 **CSS-only half exists**: `SiteStyles.swift` — *"Your own style for a site, as Arc's Boosts are: CSS you write"*, View › Edit Site Style…, kept per site in `styles.json`, applied before first paint, live as you type | ✅ plus **JS in a boost**, colours/fonts/spacing UI, hidden blocks, catalog, sharing, `BoostAI`, `BoostCLI` (34 files, 6450 lines) | `Sources/Search/SiteStyles.swift:1-14`, `SettingsIndex.swift:348` | 1C |
+| Boosts | ✅ **both halves now** (this fork): `SiteStyles.swift` keeps a site's CSS *and* its script in `styles.json` (v2, old files still read), the editor in View › Edit Site Style… switches between CSS and Script, the CSS goes in before first paint, the script runs wrapped once the document is there and is off with the switch. **Still missing vs Yab:** the colour/font/spacing UI, hidden blocks, sharing a boost as a file, the catalog and `BoostAI` | ✅ `Boost*.swift` (34 files, 6450 lines), `ArcBoosts.swift`, `BoostEditor*`, `BoostAI`, `BoostCLI` | `Sources/Search/SiteStyles.swift`, `Tab.swift:1252` | 1C done |
 | Userscripts (Tampermonkey-style managers) | ❌ `Scripting.swift` (102 lines) is internal injection only | ✅ `Userscript*.swift` (6 files, 2938 lines), `UserscriptRuntime.swift` | file listing | 1C |
 | Chrome extensions (WebKit + shims) | ✅ `Extensions*.swift` (18 files), `Crx.swift`, `ExtensionShims*` | ✅ (61 files, incl. Chromium) | both trees | — |
 | Chrome DevTools | 🟡 `Inspector.swift` (WebKit Web Inspector) | ✅ `ChromiumDevTools.swift`, `DevTools*` | file listing | with Chromium |
