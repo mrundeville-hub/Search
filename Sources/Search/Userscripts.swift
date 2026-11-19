@@ -19,7 +19,18 @@ import WebKit
 
 /// One `.user.js`: the text, its header parsed, and where it is allowed to run.
 struct Userscript: Equatable {
+    /// One `@require` file, as fetched when the script was installed: its text
+    /// and the SHA-256 of it, so a later copy can be told apart from this one.
+    struct File: Codable, Equatable {
+        var url: String
+        var sha256: String
+        var text: String
+    }
+
     let source: String
+    /// The `@require` files fetched with it, in the order the header lists them.
+    /// Run before the script, as Tampermonkey runs them.
+    var requires: [File] = []
     /// Every `@key` of the header, lowercased, with each line's value in order.
     let header: [String: [String]]
 
@@ -83,6 +94,16 @@ struct Userscript: Equatable {
     var includes: [String] { all("include") }
     var excludes: [String] { all("exclude") + all("exclude-match") }
     var grants: [String] { all("grant") }
+    /// The addresses its `@require` lines ask for. Fetched at install; nothing
+    /// is fetched when a page runs.
+    var requireURLs: [String] { all("require") }
+    /// The files it asked for, as fetched.
+    var requiresCode: String { requires.map(\.text).joined(separator: "\n") }
+
+    /// The SHA-256 of a fetched file, as pinned beside it.
+    static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
     var icon: String? { first("icon") ?? first("iconurl") ?? first("defaulticon") }
     /// The whole frame's business or the top one's: `@noframes` keeps it out
     /// of the top frame's children.
@@ -198,7 +219,8 @@ struct Userscript: Equatable {
     /// is handed to Search to keep (see UserscriptBridge). The script itself
     /// runs inside the same function, so its `GM_getValue` is this script's and
     /// two scripts on one page never see each other's values.
-    static func boot(script: Userscript, values: [String: Any], handler: String) -> String {
+    static func boot(script: Userscript, values: [String: Any], handler: String,
+                     requires: String = "") -> String {
         let kept = (try? JSONSerialization.data(withJSONObject: values))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         let meta = (try? JSONSerialization.data(withJSONObject: [
@@ -237,6 +259,7 @@ struct Userscript: Equatable {
           };
           const GM_getValue = get, GM_setValue = set, GM_deleteValue = drop, GM_listValues = list;
           const GM_info = info;
+        \(requires)
         \(script.code)
         }).call(window);
         """
@@ -259,6 +282,9 @@ final class Userscripts: ObservableObject {
         var source: String
         var enabled: Bool
         var added: Date
+        /// Absent in a file written before @require was fetched: an old line
+        /// still reads, with nothing fetched for it.
+        var requires: [Userscript.File]?
     }
 
     /// In the order they were installed.
@@ -271,12 +297,26 @@ final class Userscripts: ObservableObject {
     /// by identity, and a new instance on every page would send every script
     /// to the page's process again (see the last check in Tab.arm).
     private var made: [String: WKUserScript] = [:]
+    /// How a script and its `@require` files are fetched: the network by
+    /// default, a test's own answer when it says so.
+    typealias Fetch = @Sendable (URL) async throws -> Data
+
     private let file: URL
+    private let fetch: Fetch
     /// What scripts keep with `GM_setValue`.
     let values: UserscriptValues
 
-    init(file: URL, values: UserscriptValues? = nil) {
+    init(file: URL, values: UserscriptValues? = nil, fetch: Fetch? = nil) {
         self.file = file
+        self.fetch = fetch ?? { address in
+            var request = URLRequest(url: address)
+            request.timeoutInterval = 30
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw Userscript.Invalid("That address answered \(http.statusCode).")
+            }
+            return data
+        }
         self.values = values ?? UserscriptValues(
             file: file.deletingLastPathComponent().appendingPathComponent("userscript-values.json"))
         load()
@@ -295,8 +335,9 @@ final class Userscripts: ObservableObject {
     /// wrong with the text. A script already installed with the same name and
     /// namespace replaces the old one and stays on.
     @discardableResult
-    func install(_ source: String) throws -> Userscript {
-        let script = try Userscript.read(source)
+    func install(_ source: String, requires: [Userscript.File] = []) throws -> Userscript {
+        var script = try Userscript.read(source)
+        script.requires = requires
         let wasOn = enabled.contains(script.id)
         all.removeAll { $0.id == script.id }
         all.append(script)
@@ -307,29 +348,62 @@ final class Userscripts: ObservableObject {
         return script
     }
 
-    /// Fetches a script from an address and keeps it, as pasting its text does.
+    /// Fetches a script from an address and keeps it, as pasting its text does,
+    /// and fetches the `@require` files it asks for while it is about it: the
+    /// page it runs on fetches nothing.
     @discardableResult
     func install(from address: URL) async throws -> Userscript {
+        let text = try await text(at: address)
+        let reading = try Userscript.read(text)
+        return try install(text, requires: try await required(reading.requireURLs))
+    }
+
+    /// A script's `@require` files, each fetched once and pinned by its SHA-256
+    /// so a later copy can be told apart from this one.
+    private func required(_ lines: [String]) async throws -> [Userscript.File] {
+        guard lines.count <= 10 else {
+            throw Userscript.Invalid("A script can bring 10 required files with it at most here.")
+        }
+        var kept: [Userscript.File] = []
+        for line in lines {
+            guard let address = URL(string: line),
+                  ["http", "https"].contains(address.scheme?.lowercased() ?? "") else {
+                throw Userscript.Invalid("@require \(line) isn't an http or https address.")
+            }
+            let data = try await self.data(at: address)
+            guard data.count <= 5_000_000 else {
+                throw Userscript.Invalid("@require \(line) is larger than 5 MB.")
+            }
+            guard let source = String(data: data, encoding: .utf8) else {
+                throw Userscript.Invalid("@require \(line) isn't text.")
+            }
+            kept.append(Userscript.File(url: line, sha256: Userscript.sha256(data), text: source))
+        }
+        return kept
+    }
+
+    /// The bytes behind an address, through `fetch`: the network, or a test's
+    /// own answer.
+    private func data(at address: URL) async throws -> Data {
         guard ["http", "https"].contains(address.scheme?.lowercased() ?? "") else {
             throw Userscript.Invalid("Only an http or https address can be fetched.")
         }
-        var request = URLRequest(url: address)
-        request.timeoutInterval = 30
-        let data: Data
-        let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            return try await fetch(address)
+        } catch let refused as Userscript.Invalid {
+            throw refused
         } catch {
-            throw Userscript.Invalid("That address couldn't be reached: \(error.localizedDescription)")
+            throw Userscript.Invalid("\(address.absoluteString) couldn't be reached: \(error.localizedDescription)")
         }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw Userscript.Invalid("That address answered \(http.statusCode).")
-        }
+    }
+
+    private func text(at address: URL) async throws -> String {
+        let data = try await self.data(at: address)
         guard data.count <= 5_000_000 else { throw Userscript.Invalid("That file is larger than 5 MB.") }
         guard let text = String(data: data, encoding: .utf8) else {
             throw Userscript.Invalid("That file isn't text.")
         }
-        return try install(text)
+        return text
     }
 
     func remove(_ script: Userscript) {
@@ -354,9 +428,11 @@ final class Userscripts: ObservableObject {
             .filter { enabled.contains($0.id) && $0.runs(at: url) && (mainFrame || !$0.noFrames) }
             .map { script in
                 if let kept = made[script.id] { return kept }
+                let required = script.requiresCode
                 let source = script.wantsGM
-                    ? Userscript.boot(script: script, values: values.read(script.id), handler: Self.handler)
-                    : script.code
+                    ? Userscript.boot(script: script, values: values.read(script.id),
+                                      handler: Self.handler, requires: required)
+                    : (required.isEmpty ? script.code : required + "\n" + script.code)
                 let built = WKUserScript(source: source, injectionTime: script.runAt,
                                          forMainFrameOnly: script.noFrames, in: .page)
                 made[script.id] = built
@@ -375,8 +451,9 @@ final class Userscripts: ObservableObject {
         guard let data = try? Data(contentsOf: file),
               let kept = try? decoder.decode([Kept].self, from: data) else { return }
         for line in kept {
-            guard let script = try? Userscript.read(line.source) else { continue }
+            guard var script = try? Userscript.read(line.source) else { continue }
             if all.contains(where: { $0.id == script.id }) { continue }
+            script.requires = line.requires ?? []
             all.append(script)
             if line.enabled { enabled.insert(script.id) }
             added[script.id] = line.added
@@ -384,7 +461,8 @@ final class Userscripts: ObservableObject {
     }
 
     private func save() {
-        let kept = all.map { Kept(source: $0.source, enabled: enabled.contains($0.id), added: added[$0.id] ?? Date()) }
+        let kept = all.map { Kept(source: $0.source, enabled: enabled.contains($0.id),
+                                  added: added[$0.id] ?? Date(), requires: $0.requires) }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601

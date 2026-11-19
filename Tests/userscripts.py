@@ -43,6 +43,15 @@ if (!GM_getValue('step', '')) {
 }
 """
 
+REQUIRED = """// ==UserScript==
+// @name Bench: brings a file
+// @namespace bench.search
+// @match *://*/req*
+// @require http://bench.invalid/helper.js
+// ==/UserScript==
+document.title = window.__helper || 'missing';
+"""
+
 ONE_SITE = """// ==UserScript==
 // @name Bench: one site
 // @namespace bench.search
@@ -52,20 +61,28 @@ document.title = 'the second ran';
 """
 
 
-def keep(scripts):
+def keep(scripts, requires=None):
+    """The world's list, as the panel's Add would have written it."""
     folder = Path(sv.SUPPORT)
     folder.mkdir(parents=True, exist_ok=True)
     added = "2026-11-20T00:00:00Z"
-    (folder / "userscripts.json").write_text(json.dumps([
-        {"source": source, "enabled": True, "added": added} for source in scripts
-    ]))
+    lines = []
+    for source in scripts:
+        line = {"source": source, "enabled": True, "added": added}
+        if requires and "@require" in source:
+            line["requires"] = requires
+        lines.append(line)
+    (folder / "userscripts.json").write_text(json.dumps(lines))
 
 
 def main():
     t = sv.T()
     try:
         sv.setup()
-        keep([EVERYWHERE, ONE_SITE, GM_STORE])
+        keep([EVERYWHERE, ONE_SITE, GM_STORE, REQUIRED],
+             requires=[{"url": "http://bench.invalid/helper.js",
+                        "sha256": "0" * 64,
+                        "text": "window.__helper = 'loaded';"}])
         sv.launch()
 
         page = sv.page("plain")
@@ -83,6 +100,11 @@ def main():
         second = sv.page("gm?again")
         read = sv.ev(second, "document.title")
         t.ok("a page opened after it reads the kept value", read == "read:kept", read)
+
+        # A file the script required goes in ahead of it.
+        brought = sv.page("req")
+        t.ok("a @require file runs before the script that asked for it",
+             sv.ev(brought, "document.title") == "loaded", sv.ev(brought, "document.title"))
 
         sv.cmd({"do": "ui", "lead": "userscripts"})
         time.sleep(0.8)

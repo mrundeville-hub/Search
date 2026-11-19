@@ -157,6 +157,13 @@ private struct Row: View {
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if !script.requires.isEmpty {
+                    Text(script.requires.count == 1
+                         ? "brings 1 required file, fetched when it was added"
+                         : "brings \(script.requires.count) required files, fetched when it was added")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Palette.muted)
+                }
                 if !script.summary.isEmpty {
                     Text(script.summary)
                         .font(.system(size: 11))

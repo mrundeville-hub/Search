@@ -220,6 +220,91 @@ final class UserscriptsTests: XCTestCase {
         XCTAssertNotNil(again.read("two")["greeting"], "removing one script's key leaves the other's")
     }
 
+
+    func testRequireLinesAreRead() throws {
+        let script = try Userscript.read("""
+        // ==UserScript==
+        // @name Needs files
+        // @require https://example.com/a.js
+        // @require https://example.com/b.js
+        // ==/UserScript==
+        window.a = 1;
+        """)
+        XCTAssertEqual(script.requireURLs, ["https://example.com/a.js", "https://example.com/b.js"])
+        XCTAssertEqual(script.requiresCode, "", "nothing is fetched at read time")
+        XCTAssertEqual(Userscript.sha256(Data("abc".utf8)),
+                       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
+    @MainActor
+    func testInstallingFromAnAddressBringsItsRequiredFiles() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("userscripts-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("userscripts.json")
+
+        let helper = "window.__helper = 'loaded';"
+        let store = Userscripts(file: file, fetch: { address in
+            if address.path == "/tool.user.js" {
+                return Data("""
+                // ==UserScript==
+                // @name Bench tool
+                // @namespace bench
+                // @require http://127.0.0.1:9/helper.js
+                // @match http://127.0.0.1/*
+                // ==/UserScript==
+                document.title = window.__helper || 'missing';
+                """.utf8)
+            }
+            return Data(helper.utf8)
+        })
+
+        let script = try await store.install(from: URL(string: "http://127.0.0.1:9/tool.user.js")!)
+        XCTAssertEqual(script.requires.count, 1)
+        XCTAssertEqual(script.requires[0].url, "http://127.0.0.1:9/helper.js")
+        XCTAssertEqual(script.requires[0].text, helper)
+        XCTAssertEqual(script.requires[0].sha256, Userscript.sha256(Data(helper.utf8)),
+                       "each file is pinned by its own hash")
+
+        let injected = store.scripts(for: URL(string: "http://127.0.0.1:9/page")!)
+        XCTAssertEqual(injected.count, 1)
+        XCTAssertTrue(injected[0].source.contains("window.__helper = 'loaded';"),
+                      "the required file goes in ahead of the script")
+        XCTAssertTrue(injected[0].source.contains("document.title = window.__helper"))
+
+        // A required file that can't be had means the script isn't installed half-formed.
+        let strict = Userscripts(file: folder.appendingPathComponent("other.json"), fetch: { _ in
+            throw Userscript.Invalid("nope")
+        })
+        do {
+            _ = try await strict.install(from: URL(string: "http://127.0.0.1:9/tool.user.js")!)
+            XCTFail("an install with an unreachable @require should fail")
+        } catch let error as Userscript.Invalid {
+            XCTAssertTrue(error.message.contains("nope"), error.message)
+        }
+        XCTAssertTrue(strict.all.isEmpty)
+    }
+
+    @MainActor
+    func testRequiredFilesSurviveARelaunch() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("userscripts-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("userscripts.json")
+
+        let store = Userscripts(file: file, fetch: { address in
+            address.path == "/tool.user.js"
+                ? Data("// ==UserScript==\n// @name Tool\n// @require http://x/y.js\n// @match *://*/*\n// ==/UserScript==\nwindow.z = 1;\n".utf8)
+                : Data("window.y = 2;".utf8)
+        })
+        _ = try await store.install(from: URL(string: "http://x/tool.user.js")!)
+
+        let again = Userscripts(file: file)
+        XCTAssertEqual(again.all.count, 1)
+        XCTAssertEqual(again.all[0].requires.map(\.text), ["window.y = 2;"],
+                       "the fetched file is kept with the script, not fetched again")
+    }
+
     @MainActor
     func testScriptsForAPage() throws {
         let file = FileManager.default.temporaryDirectory
