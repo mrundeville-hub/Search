@@ -150,6 +150,76 @@ final class UserscriptsTests: XCTestCase {
         XCTAssertEqual(InternalPage(.userscripts).url.absoluteString, "search://userscripts")
     }
 
+
+    func testAScriptThatAsksForGMCallsIsToldSo() throws {
+        let granted = try Userscript.read("""
+        // ==UserScript==
+        // @name Grants
+        // @grant GM_setValue
+        // ==/UserScript==
+        """)
+        XCTAssertTrue(granted.wantsGM)
+
+        let plain = try Userscript.read("""
+        // ==UserScript==
+        // @name Plain
+        // @grant none
+        // ==/UserScript==
+        document.body.append('hello');
+        """)
+        XCTAssertFalse(plain.wantsGM)
+
+        let silent = try Userscript.read("""
+        // ==UserScript==
+        // @name Silent
+        // ==/UserScript==
+        const kept = GM_getValue('k', 1);
+        """)
+        XCTAssertTrue(silent.wantsGM, "one that calls them without a @grant gets them too")
+    }
+
+    func testTheBootCarriesTheScriptAndItsValues() throws {
+        let script = try Userscript.read("""
+        // ==UserScript==
+        // @name "Quoted" name
+        // @namespace bench
+        // @grant GM_getValue
+        // ==/UserScript==
+        document.title = GM_getValue('greeting', 'none');
+        """)
+        let boot = Userscript.boot(script: script, values: ["greeting": "hi \"there\""],
+                                   handler: Userscripts.handler)
+        XCTAssertTrue(boot.contains(#""greeting":"hi \"there\"""#), "the value goes in as JSON, escaped")
+        XCTAssertTrue(boot.contains("document.title = GM_getValue"), "the script runs inside the boot")
+        XCTAssertTrue(boot.contains("officeUserscript"), "the channel it writes on is named")
+        XCTAssertTrue(boot.contains(#"\"Quoted\" name"#), "the header's quoting doesn't break the boot")
+    }
+
+    @MainActor
+    func testValuesAreKeptPerScriptAndSurvive() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("userscript-values-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("userscript-values.json")
+
+        let values = UserscriptValues(file: file)
+        values.set("hi", for: "greeting", script: "one")
+        values.set(42.0, for: "count", script: "one")
+        values.set("other", for: "greeting", script: "two")
+        values.set(["nested": ["a": 1.0]] as [String: Any], for: "tree", script: "one")
+
+        XCTAssertEqual(values.read("one")["greeting"] as? String, "hi")
+        XCTAssertEqual(values.read("two")["greeting"] as? String, "other", "two scripts never share values")
+        XCTAssertEqual((values.read("one")["tree"] as? [String: Any])?["nested"] as? [String: Double], ["a": 1])
+
+        let again = UserscriptValues(file: file)
+        XCTAssertEqual(again.read("one")["count"] as? Double, 42, "a value is there at the next launch")
+
+        again.remove("greeting", script: "one")
+        XCTAssertNil(again.read("one")["greeting"])
+        XCTAssertNotNil(again.read("two")["greeting"], "removing one script's key leaves the other's")
+    }
+
     @MainActor
     func testScriptsForAPage() throws {
         let file = FileManager.default.temporaryDirectory

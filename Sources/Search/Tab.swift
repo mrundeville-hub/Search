@@ -30,7 +30,7 @@ enum Web {
     @MainActor static func release(_ controller: WKUserContentController) {
         for name in [ScrollRelay.name, VeilRelay.name, FormRelay.name, ImageRelay.name, MediaKeys.name,
                      StoreRelay.name, PasskeyRelay.name, MiddleRelay.name, IconRelay.name, PopupGestureRelay.name, DuskRelay.name,
-                     TranslateRelay.name] {
+                     TranslateRelay.name, UserscriptBridge.name] {
             controller.removeScriptMessageHandler(forName: name, contentWorld: world)
             controller.removeScriptMessageHandler(forName: name, contentWorld: .page)
         }
@@ -693,6 +693,7 @@ final class Tab: ObservableObject, Identifiable {
     private let shop = StoreRelay()
     private let iconChanges = IconRelay()
     private let middles = MiddleRelay()
+    private let userscripts = UserscriptBridge()
     private let dusk = DuskRelay()
     var popupGesture = PopupGesture()
     /// Windows this page asked for and was refused, newest last, a few at
@@ -1018,6 +1019,9 @@ final class Tab: ObservableObject, Identifiable {
         controller.add(middles, contentWorld: Web.world, name: MiddleRelay.name)
         controller.add(dusk, contentWorld: Web.world, name: DuskRelay.name)
         controller.add(translateRelay, contentWorld: Web.world, name: TranslateRelay.name)
+        // Userscripts' GM_setValue, in the page's world, where the scripts run
+        // (see UserscriptBridge).
+        controller.add(userscripts, contentWorld: .page, name: UserscriptBridge.name)
         PopupGestureRelay.install(on: controller)
         Shield.shared.protect(controller)
         built = web

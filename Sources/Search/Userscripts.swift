@@ -180,10 +180,67 @@ struct Userscript: Equatable {
         return allowed.contains(where: hit)
     }
 
+    /// Whether it asks for the `GM_*` calls, by `@grant` or by using them
+    /// without one, as Tampermonkey gives them to a script that does either.
+    var wantsGM: Bool {
+        if grants.contains(where: { $0.hasPrefix("GM_") || $0.hasPrefix("GM.") }) { return true }
+        return source.range(of: #"\bGM[_.][A-Za-z]"#, options: .regularExpression) != nil
+    }
+
     /// What goes into the page: the file as it was written, header and all, as
     /// Tampermonkey puts it in. Nothing is rewritten, so a script that reads
     /// its own header still finds it.
     var code: String { source }
+
+    /// The few lines that stand the `GM_*` calls up before the script, when it
+    /// asked for them. The values it can see are the ones Search kept, read
+    /// into the page as they stand: `GM_getValue` answers at once, and a write
+    /// is handed to Search to keep (see UserscriptBridge). The script itself
+    /// runs inside the same function, so its `GM_getValue` is this script's and
+    /// two scripts on one page never see each other's values.
+    static func boot(script: Userscript, values: [String: Any], handler: String) -> String {
+        let kept = (try? JSONSerialization.data(withJSONObject: values))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        let meta = (try? JSONSerialization.data(withJSONObject: [
+            "script": ["name": script.name, "namespace": script.namespace, "version": script.version],
+            "scriptHandler": "Search",
+        ])).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        // A bare string is a fragment, which JSONSerialization only writes when
+        // told to: without the option this throws, and the app went with it.
+        let id = (try? JSONSerialization.data(withJSONObject: script.id, options: [.fragmentsAllowed]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "\"script\""
+        return """
+        (function () {
+          "use strict";
+          const id = \(id);
+          const values = \(kept);
+          const info = \(meta);
+          const send = (message) => {
+            try { window.webkit.messageHandlers["\(handler)"].postMessage(message); } catch (e) {}
+          };
+          const get = (key, fallback) => Object.prototype.hasOwnProperty.call(values, key) ? values[key] : fallback;
+          const set = (key, value) => {
+            values[key] = value;
+            send({ do: "set", id: id, key: String(key), value: value });
+          };
+          const drop = (key) => {
+            delete values[key];
+            send({ do: "delete", id: id, key: String(key) });
+          };
+          const list = () => Object.keys(values);
+          const GM = {
+            info: info,
+            getValue: (key, fallback) => Promise.resolve(get(key, fallback)),
+            setValue: (key, value) => { set(key, value); return Promise.resolve(); },
+            deleteValue: (key) => { drop(key); return Promise.resolve(); },
+            listValues: () => Promise.resolve(list()),
+          };
+          const GM_getValue = get, GM_setValue = set, GM_deleteValue = drop, GM_listValues = list;
+          const GM_info = info;
+        \(script.code)
+        }).call(window);
+        """
+    }
 }
 
 // MARK: - keeping them
@@ -193,6 +250,9 @@ struct Userscript: Equatable {
 @MainActor
 final class Userscripts: ObservableObject {
     static let shared = Userscripts(file: Store.file("userscripts.json"))
+
+    /// The channel a script's `GM_setValue` writes on (see Userscript.boot).
+    static let handler = "officeUserscript"
 
     /// One line of the file: the script as it was read, and whether it runs.
     private struct Kept: Codable, Equatable {
@@ -212,11 +272,19 @@ final class Userscripts: ObservableObject {
     /// to the page's process again (see the last check in Tab.arm).
     private var made: [String: WKUserScript] = [:]
     private let file: URL
+    /// What scripts keep with `GM_setValue`.
+    let values: UserscriptValues
 
-    init(file: URL) {
+    init(file: URL, values: UserscriptValues? = nil) {
         self.file = file
+        self.values = values ?? UserscriptValues(
+            file: file.deletingLastPathComponent().appendingPathComponent("userscript-values.json"))
         load()
     }
+
+    /// A script wrote a value: the next page gets it in the boot, so the
+    /// `WKUserScript` made for the last one is dropped.
+    func valueChanged(_ id: String) { made[id] = nil }
 
     func isEnabled(_ script: Userscript) -> Bool { enabled.contains(script.id) }
 
@@ -286,7 +354,10 @@ final class Userscripts: ObservableObject {
             .filter { enabled.contains($0.id) && $0.runs(at: url) && (mainFrame || !$0.noFrames) }
             .map { script in
                 if let kept = made[script.id] { return kept }
-                let built = WKUserScript(source: script.code, injectionTime: script.runAt,
+                let source = script.wantsGM
+                    ? Userscript.boot(script: script, values: values.read(script.id), handler: Self.handler)
+                    : script.code
+                let built = WKUserScript(source: source, injectionTime: script.runAt,
                                          forMainFrameOnly: script.noFrames, in: .page)
                 made[script.id] = built
                 return built
@@ -321,5 +392,80 @@ final class Userscripts: ObservableObject {
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
+    }
+}
+
+// MARK: - what scripts keep
+
+/// The values userscripts keep with `GM_setValue`, by script id and key, in
+/// `userscript-values.json`. One small file beside `userscripts.json`, not one
+/// per script: there are never many.
+@MainActor
+final class UserscriptValues {
+    private let file: URL
+    private var byScript: [String: [String: Any]] = [:]
+
+    init(file: URL) {
+        self.file = file
+        load()
+    }
+
+    func read(_ script: String) -> [String: Any] { byScript[script] ?? [:] }
+
+    /// A value a script asked to keep. Only something JSON can hold: a value
+    /// that can't be written down would be lost at the next launch anyway.
+    func set(_ value: Any, for key: String, script: String) {
+        guard JSONSerialization.isValidJSONObject(["value": value]) else { return }
+        var kept = byScript[script] ?? [:]
+        kept[key] = value
+        byScript[script] = kept
+        save()
+    }
+
+    func remove(_ key: String, script: String) {
+        guard var kept = byScript[script], kept[key] != nil else { return }
+        kept[key] = nil
+        if kept.isEmpty { byScript[script] = nil } else { byScript[script] = kept }
+        save()
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: file),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: [String: Any]]
+        else { return }
+        byScript = object
+    }
+
+    private func save() {
+        guard let data = try? JSONSerialization.data(withJSONObject: byScript,
+                                                     options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? data.write(to: file, options: .atomic)
+    }
+}
+
+/// What a script's `GM_setValue` and `GM_deleteValue` arrive on: the id the
+/// script was booted with, and the key it wrote (see Userscript.boot). Nothing
+/// else is taken from a page.
+@MainActor
+final class UserscriptBridge: NSObject, WKScriptMessageHandler {
+    static let name = Userscripts.handler
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any],
+              let id = body["id"] as? String,
+              let key = body["key"] as? String else { return }
+        let store = Userscripts.shared
+        switch body["do"] as? String {
+        case "set":
+            guard let value = body["value"] else { return }
+            store.values.set(value, for: key, script: id)
+        case "delete":
+            store.values.remove(key, script: id)
+        default:
+            return
+        }
+        store.valueChanged(id)
     }
 }

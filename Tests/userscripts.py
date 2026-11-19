@@ -28,6 +28,21 @@ EVERYWHERE = """// ==UserScript==
 document.title = 'the first ran';
 """
 
+GM_STORE = """// ==UserScript==
+// @name Bench: GM store
+// @namespace bench.search
+// @match *://*/gm*
+// @grant GM_setValue
+// @grant GM_getValue
+// ==/UserScript==
+if (!GM_getValue('step', '')) {
+  GM_setValue('step', 'kept');
+  document.title = 'wrote';
+} else {
+  document.title = 'read:' + GM_getValue('step', 'missing');
+}
+"""
+
 ONE_SITE = """// ==UserScript==
 // @name Bench: one site
 // @namespace bench.search
@@ -50,12 +65,24 @@ def main():
     t = sv.T()
     try:
         sv.setup()
-        keep([EVERYWHERE, ONE_SITE])
+        keep([EVERYWHERE, ONE_SITE, GM_STORE])
         sv.launch()
 
         page = sv.page("plain")
         title = sv.ev(page, "document.title")
         t.ok("the script whose @match takes this address runs", title == "the first ran", title)
+
+        # GM_setValue reaches Search, is kept, and is there for the page after.
+        first = sv.page("gm")
+        wrote = sv.ev(first, "document.title")
+        t.ok("GM_setValue answers at once in the page", wrote == "wrote", wrote)
+        time.sleep(0.8)
+        kept = json.loads((Path(sv.SUPPORT) / "userscript-values.json").read_text())
+        t.ok("the value reached Search's file", any("kept" in str(v) for v in kept.values()), kept)
+
+        second = sv.page("gm?again")
+        read = sv.ev(second, "document.title")
+        t.ok("a page opened after it reads the kept value", read == "read:kept", read)
 
         sv.cmd({"do": "ui", "lead": "userscripts"})
         time.sleep(0.8)
