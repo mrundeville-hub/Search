@@ -18,6 +18,7 @@ struct InternalPage: Equatable {
         case settings, history, downloads, bookmarks, passwords, archive
         case importing = "import"
         case notes = "release-notes"
+        case userscripts
     }
 
     var kind: Kind
@@ -58,6 +59,7 @@ struct InternalPage: Equatable {
         case .archive: return "Archived Tabs"
         case .importing: return "Bring Things Over"
         case .notes: return "What's New"
+        case .userscripts: return "Userscripts"
         }
     }
 
@@ -71,6 +73,7 @@ struct InternalPage: Equatable {
         case .archive: return "archivebox"
         case .importing: return "square.and.arrow.down"
         case .notes: return "sparkles"
+        case .userscripts: return "curlybraces"
         }
     }
 
@@ -171,6 +174,8 @@ struct InternalPageView: View {
             ImportPanel(browser: browser)
         case .notes:
             ReleaseNotesPanel { browser.putAway(.notes) }
+        case .userscripts:
+            UserscriptsPanel()
         }
     }
 }

@@ -136,6 +136,20 @@ final class UserscriptsTests: XCTestCase {
         XCTAssertTrue(store.isEnabled(store.all[0]), "installing again turns it on")
     }
 
+    func testAnAddressIsToldFromAScript() {
+        XCTAssertNotNil(Userscript.address("https://example.com/tools/darker.user.js"))
+        XCTAssertNotNil(Userscript.address("  http://localhost:8000/x.user.js  "))
+        XCTAssertNil(Userscript.address("// ==UserScript==\n// @name x"))
+        XCTAssertNil(Userscript.address("document.body.style.background = 'red'"))
+        XCTAssertNil(Userscript.address("file:///Users/someone/x.user.js"), "nothing is fetched from the disk by the panel")
+        XCTAssertNil(Userscript.address(""))
+    }
+
+    func testThePagesAddressIsOne() {
+        XCTAssertEqual(InternalPage(url: URL(string: "search://userscripts")!)?.kind, .userscripts)
+        XCTAssertEqual(InternalPage(.userscripts).url.absoluteString, "search://userscripts")
+    }
+
     @MainActor
     func testScriptsForAPage() throws {
         let file = FileManager.default.temporaryDirectory

@@ -29,6 +29,16 @@ struct Userscript: Equatable {
         var errorDescription: String? { message }
     }
 
+    /// The address of a script, when the text is one: one line, an http or
+    /// https link. Anything else the panel is given is the script itself.
+    static func address(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("\n"), !trimmed.contains(" ") else { return nil }
+        guard let url = URL(string: trimmed),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        return url
+    }
+
     /// Whether the text is a userscript at all: a `==UserScript==` block near
     /// its top, wherever it was served from.
     static func looks(_ text: String) -> Bool {
@@ -194,7 +204,7 @@ final class Userscripts: ObservableObject {
     /// In the order they were installed.
     @Published private(set) var all: [Userscript] = []
 
-    private var enabled: Set<String> = []
+    @Published private(set) var enabled: Set<String> = []
     private var added: [String: Date] = [:]
     /// The `WKUserScript` made for each script, kept and handed back on every
     /// navigation: the content controller compares the scripts it already has
@@ -210,6 +220,9 @@ final class Userscripts: ObservableObject {
 
     func isEnabled(_ script: Userscript) -> Bool { enabled.contains(script.id) }
 
+    /// Where the list is kept, for Show in Finder.
+    var fileURL: URL { file }
+
     /// Reads a script and keeps it. Returns it as read; an error says what is
     /// wrong with the text. A script already installed with the same name and
     /// namespace replaces the old one and stays on.
@@ -224,6 +237,31 @@ final class Userscripts: ObservableObject {
         if !wasOn { added[script.id] = Date() }
         save()
         return script
+    }
+
+    /// Fetches a script from an address and keeps it, as pasting its text does.
+    @discardableResult
+    func install(from address: URL) async throws -> Userscript {
+        guard ["http", "https"].contains(address.scheme?.lowercased() ?? "") else {
+            throw Userscript.Invalid("Only an http or https address can be fetched.")
+        }
+        var request = URLRequest(url: address)
+        request.timeoutInterval = 30
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw Userscript.Invalid("That address couldn't be reached: \(error.localizedDescription)")
+        }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw Userscript.Invalid("That address answered \(http.statusCode).")
+        }
+        guard data.count <= 5_000_000 else { throw Userscript.Invalid("That file is larger than 5 MB.") }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw Userscript.Invalid("That file isn't text.")
+        }
+        return try install(text)
     }
 
     func remove(_ script: Userscript) {
