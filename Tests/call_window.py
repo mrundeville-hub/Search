@@ -29,6 +29,15 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream =>
 """
 
 
+def until(cond, within=10):
+    end = time.time() + within
+    while time.time() < end:
+        if cond():
+            return True
+        time.sleep(0.2)
+    return cond()
+
+
 def described(tab):
     return next((x for x in sv.cmd({"do": "tabs"})["tabs"] if x["id"] == tab), {})
 
@@ -75,6 +84,21 @@ def main():
         t.ok("landing it closes the window", landed["showing"] is False, landed)
         t.ok("and the page is back in its tab, still the same page",
              sv.ev(page, "window.state") == "live" and sv.ev(page, "1 + 1") == 2, landed)
+
+        # ---- the setting: a call goes out by itself, and comes back by itself
+        sv.setup(splitView=True, **{"pages.floatcalls": True})
+        for kind in (0, 1, 2):
+            subprocess.run(["defaults", "write", sv.SUITE, f"capture.{sv.BASE}|{kind}", "-bool", "true"])
+        sv.launch()
+        auto = sv.sp("open", url=f"{sv.BASE}/call")["resultID"]
+        time.sleep(0.6)
+        sv.ev(auto, START)
+        t.ok("the call starts", until(lambda: sv.ev(auto, "window.state") == "live"), sv.ev(auto, "window.state"))
+        t.ok("the window opens by itself", until(lambda: calls()["showing"] is True), calls())
+
+        sv.ev(auto, "window.stream.getTracks().forEach(function (track) { track.stop() }); 'stopped'")
+        t.ok("and closes by itself when the call ends",
+             until(lambda: calls()["showing"] is False), calls())
     finally:
         t.done()
         sv.finish()

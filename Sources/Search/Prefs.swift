@@ -731,6 +731,15 @@ final class Preferences: ObservableObject {
             HoveredLink.on = showsLinks || linkCards
         }
     }
+    /// A call in a page goes out into a window of its own the moment it starts
+    /// (see Browser.lookForCall). Off unless asked for: taking a page out of
+    /// its tab is not something to do to someone by surprise.
+    @Published var floatsCalls: Bool {
+        didSet {
+            store.set(floatsCalls, forKey: "pages.floatcalls")
+            Browsers.all.forEach { $0.syncCallWatch() }
+        }
+    }
     /// Snippets in a page's boxes: `;sig` and a space, and the signature is
     /// there (see Snippets.swift). Off unless asked for.
     @Published var pageSnippets: Bool {
@@ -1207,6 +1216,8 @@ final class Preferences: ObservableObject {
         let snippets = store.bool(forKey: "pages.snippets")
         pageSnippets = snippets
         Snippets.on = snippets
+        let floatsCalls = store.bool(forKey: "pages.floatcalls")
+        self.floatsCalls = floatsCalls
         let cards = store.bool(forKey: "links.cards")
         linkCards = cards
         LinkCards.on = cards

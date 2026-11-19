@@ -189,6 +189,11 @@ final class Browser: NSObject, ObservableObject {
     @Published private(set) var floatingCall: Tab.ID?
     /// The call window itself, made when one is first needed.
     let callWindow = CallWindow()
+    /// The look for a call that starts, while the setting says to.
+    private var callWatch: Timer?
+    /// The call this app floated by itself, so it can be landed by itself when
+    /// the call ends. One a person floated stays where they put it.
+    private var autoFloated: Tab.ID?
 
     @Published private(set) var floating: Tab.ID? {
         didSet {
@@ -2957,6 +2962,7 @@ final class Browser: NSObject, ObservableObject {
         defer {
             follow()
             if !isPopup { watchForSleep() }
+            if !isPopup { syncCallWatch() }
             // Before the first frame: tabs whose time ran out while Search
             // was quit are gone, rather than drawn and taken away a minute on.
             if !isPopup { closeLeftAlone() }
@@ -6920,6 +6926,39 @@ final class Browser: NSObject, ObservableObject {
     func onCall(_ tab: Tab) -> Bool {
         guard let web = tab.built else { return false }
         return StageView.onCall(web)
+    }
+
+    /// Watches for a call while the setting says to, and puts it out in a window
+    /// of its own as it starts — Yab's habit. Off, the timer is not running at
+    /// all: nothing polls a page nobody asked about.
+    func syncCallWatch() {
+        if prefs.floatsCalls {
+            guard callWatch == nil else { return }
+            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.lookForCall() }
+            }
+            timer.tolerance = 0.25
+            RunLoop.main.add(timer, forMode: .common)
+            callWatch = timer
+        } else {
+            callWatch?.invalidate()
+            callWatch = nil
+            autoFloated = nil
+        }
+    }
+
+    private func lookForCall() {
+        guard prefs.floatsCalls else { return }
+        // A call that has ended takes the window it opened with it.
+        if let id = floatingCall, autoFloated == id,
+           !(tabs + parkedTabs).contains(where: { $0.id == id && onCall($0) }) {
+            autoFloated = nil
+            landCall()
+            return
+        }
+        guard floatingCall == nil, let tab = active, !tab.shy, onCall(tab) else { return }
+        autoFloated = tab.id
+        floatCall(tab)
     }
 
     /// The call out in a window of its own, as Yab does for Zoom and Slack.
