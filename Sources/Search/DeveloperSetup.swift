@@ -135,6 +135,109 @@ enum DeveloperSetup {
         return written
     }
 
+    /// What taking it back did, in words a row can show.
+    struct Removal {
+        var removed: [URL] = []
+        /// What was left, and why: a copy of the entry that points elsewhere,
+        /// or a skill someone has since edited.
+        var kept: [String] = []
+
+        var isEmpty: Bool { removed.isEmpty && kept.isEmpty }
+        var said: String {
+            if isEmpty { return "Nothing to remove." }
+            var parts: [String] = []
+            if removed.isEmpty == false { parts.append("Removed.") }
+            parts += kept
+            return parts.joined(separator: " ")
+        }
+    }
+
+    /// Takes back the entry and the skill, and only what is ours: an entry that
+    /// points at another copy of the server, or a skill someone has edited, is
+    /// left where it is and said so. A backup taken when the entry was written
+    /// is not put back — it may be older than changes made since — so what is
+    /// replaced is said instead.
+    static func remove(for client: Client, command: String, home: URL) -> Removal {
+        var report = Removal()
+        let config = client.config(in: home)
+        if let text = try? String(contentsOf: config, encoding: .utf8) {
+            switch client {
+            case .claudeCode:
+                if let result = removedFromJSON(text, command: command) {
+                    if result.removed, let after = result.text {
+                        try? after.write(to: config, atomically: true, encoding: .utf8)
+                        report.removed.append(config)
+                    } else if result.foreign {
+                        report.kept.append("The entry in \(config.lastPathComponent) points at another copy, so it stays.")
+                    }
+                }
+            case .codex:
+                let result = removedFromTOML(text, command: command)
+                if result.removed {
+                    try? result.text.write(to: config, atomically: true, encoding: .utf8)
+                    report.removed.append(config)
+                } else if result.foreign {
+                    report.kept.append("The table in \(config.lastPathComponent) points at another copy, so it stays.")
+                }
+            }
+        }
+        let skill = home.appendingPathComponent(client.skillFolder).appendingPathComponent("search/SKILL.md")
+        if let text = try? String(contentsOf: skill, encoding: .utf8) {
+            if text == skillText {
+                try? FileManager.default.removeItem(at: skill)
+                // The folder goes too, when the skill was all that was in it.
+                try? FileManager.default.removeItem(at: skill.deletingLastPathComponent())
+                report.removed.append(skill)
+            } else {
+                report.kept.append("The skill at \(skill.path) has been edited, so it stays.")
+            }
+        }
+        return report
+    }
+
+    /// `mcpServers.search` taken out of Claude Code's object, and nothing else.
+    /// `foreign` is true when there is an entry whose command isn't ours.
+    static func removedFromJSON(_ text: String, command: String)
+        -> (text: String?, removed: Bool, foreign: Bool)? {
+        guard let data = text.data(using: .utf8),
+              var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var servers = object["mcpServers"] as? [String: Any],
+              let entry = servers[serverName] as? [String: Any] else { return nil }
+        guard entry["command"] as? String == command else { return (nil, false, true) }
+        servers[serverName] = nil
+        if servers.isEmpty { object["mcpServers"] = nil } else { object["mcpServers"] = servers }
+        let pretty = JSONSerialization.WritingOptions.prettyPrinted
+            .union(.sortedKeys).union(.withoutEscapingSlashes)
+        guard let wrote = try? JSONSerialization.data(withJSONObject: object, options: pretty),
+              let said = String(data: wrote, encoding: .utf8) else { return (nil, false, false) }
+        return (said + "\n", true, false)
+    }
+
+    /// The `[mcp_servers.search]` table taken out of a TOML file, the rest of
+    /// the lines left as they were.
+    static func removedFromTOML(_ text: String, command: String) -> (text: String, removed: Bool, foreign: Bool) {
+        var lines = text.components(separatedBy: "\n")
+        let header = "[mcp_servers.\(serverName)]"
+        guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else {
+            return (text, false, false)
+        }
+        var end = start + 1
+        while end < lines.count, !lines[end].trimmingCharacters(in: .whitespaces).hasPrefix("[") { end += 1 }
+        let table = lines[start..<end].joined(separator: "\n")
+        guard table.contains(quoted(command)) else { return (text, false, true) }
+        var before = Array(lines[..<start])
+        // A blank line that was only separating the table goes with it.
+        while before.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { before.removeLast() }
+        let after = Array(lines[end...])
+        var out = before.joined(separator: "\n")
+        if !after.isEmpty {
+            if !out.isEmpty { out += "\n\n" }
+            out += after.joined(separator: "\n")
+        }
+        if !out.isEmpty, !out.hasSuffix("\n") { out += "\n" }
+        return (out, true, false)
+    }
+
     /// The home folder of the person using the app, or the one a test says.
     static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
 
@@ -290,5 +393,39 @@ struct CopyAgentConfig: View {
                 said = "Copied."
             }
         }
+    }
+}
+
+/// "Remove what Search set up": both clients and both skills, and a word about
+/// anything it left alone.
+struct DeveloperRemove: View {
+    @State private var said: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let said {
+                Text(said)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.muted)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.trailing)
+            }
+            Pill("Remove") { remove() }
+        }
+    }
+
+    private func remove() {
+        guard let command = DeveloperSetup.command else {
+            said = "This build has no MCP server inside it."
+            return
+        }
+        var parts: [String] = []
+        var touched = false
+        for client in DeveloperSetup.Client.allCases {
+            let report = DeveloperSetup.remove(for: client, command: command, home: DeveloperSetup.home)
+            if !report.removed.isEmpty { touched = true }
+            if !report.kept.isEmpty { parts += report.kept }
+        }
+        said = touched ? (["Removed."] + parts).joined(separator: " ") : (parts.isEmpty ? "Nothing to remove." : parts.joined(separator: " "))
     }
 }

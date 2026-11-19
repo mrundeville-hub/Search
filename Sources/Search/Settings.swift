@@ -702,6 +702,7 @@ struct SettingsPanel: View {
         case "developer.claudecode": DeveloperButton(client: .claudeCode, prefs: prefs)
         case "developer.codex": DeveloperButton(client: .codex, prefs: prefs)
         case "developer.copyconfig": CopyAgentConfig()
+        case "developer.remove": DeveloperRemove()
         case "pages.snippets": Switch(on: $prefs.pageSnippets)
         case "links.little.tabs": Switch(on: $prefs.littleFindsTabs)
         case "reader.twins": Switch(on: $prefs.readsTwins)

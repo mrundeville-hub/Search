@@ -56,6 +56,24 @@ def main():
              (home / ".codex" / "config.toml.search.backup").exists() is False,
              "no backup when there was nothing there")
 
+        # Taking it back: only what the setup wrote.
+        removed = sv.cmd({"do": "developers", "client": "claude_code", "action": "remove", "home": str(home)})
+        t.ok("removing takes the entry and the skill out", len(removed.get("removed", [])) == 2, removed)
+        t.ok("Claude Code's config no longer lists it",
+             "search" not in json.loads(config.read_text()).get("mcpServers", {}), config.read_text())
+        t.ok("and the skill is gone", not skill.exists())
+
+        gone = sv.cmd({"do": "developers", "client": "codex", "action": "remove", "home": str(home)})
+        toml_after = (home / ".codex" / "config.toml").read_text()
+        t.ok("Codex's table is gone, its file left empty and clean",
+             "[mcp_servers.search]" not in toml_after and toml_after.strip() == "", repr(toml_after))
+        t.ok("the skill beside it too",
+             not (home / ".agents" / "skills" / "search" / "SKILL.md").exists(), gone)
+
+        again = sv.cmd({"do": "developers", "client": "codex", "action": "remove", "home": str(home)})
+        t.ok("removing again finds nothing to remove",
+             again.get("removed") == [] and again.get("kept") == [], again)
+
         # What Copy Config would put on the clipboard.
         copied = json.loads(first["json"])["mcpServers"]["search"]
         t.ok("the copied config is the same entry", copied["command"] == command, copied)

@@ -113,4 +113,77 @@ final class DeveloperSetupTests: XCTestCase {
         let entry = (object?["mcpServers"] as? [String: Any])?["search"] as? [String: Any]
         XCTAssertEqual(entry?["command"] as? String, command)
     }
+
+    // MARK: - taking it back
+
+    func testRemovingClaudesEntryKeepsEverythingElse() throws {
+        let dir = home()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try DeveloperSetup.apply(for: .claudeCode, command: command, home: dir)
+        let report = DeveloperSetup.remove(for: .claudeCode, command: command, home: dir)
+        XCTAssertTrue(report.kept.isEmpty, report.kept.joined())
+
+        let config = dir.appendingPathComponent(".claude.json")
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as? [String: Any]
+        XCTAssertNil((object?["mcpServers"] as? [String: Any])?["search"], "the entry is gone")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(".claude/skills/search/SKILL.md").path))
+    }
+
+    func testAnEntryPointingElsewhereIsLeftAlone() throws {
+        let dir = home()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent(".claude.json")
+        try """
+        {"mcpServers": {"search": {"command": "/somewhere/else/search-mcp", "args": []}}}
+        """.write(to: config, atomically: true, encoding: .utf8)
+
+        let report = DeveloperSetup.remove(for: .claudeCode, command: command, home: dir)
+        XCTAssertTrue(report.removed.isEmpty)
+        XCTAssertEqual(report.kept.count, 1)
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as? [String: Any]
+        XCTAssertNotNil((object?["mcpServers"] as? [String: Any])?["search"], "someone else's entry stays")
+    }
+
+    func testCodicesTableGoesAndTheRestStays() throws {
+        let dir = home()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let config = dir.appendingPathComponent(".codex/config.toml")
+        try FileManager.default.createDirectory(at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try """
+        model = "gpt-5"
+
+        [mcp_servers.other]
+        command = "/usr/bin/other"
+        """.write(to: config, atomically: true, encoding: .utf8)
+
+        _ = try DeveloperSetup.apply(for: .codex, command: command, home: dir)
+        let report = DeveloperSetup.remove(for: .codex, command: command, home: dir)
+        XCTAssertEqual(report.removed.count, 2, "the table and the skill")
+        let text = try String(contentsOf: config, encoding: .utf8)
+        XCTAssertFalse(text.contains("[mcp_servers.search]"))
+        XCTAssertTrue(text.contains("model = \"gpt-5\""))
+        XCTAssertTrue(text.contains("[mcp_servers.other]"))
+        XCTAssertFalse(text.hasSuffix("\n\n"), "no blank line left where the table was")
+    }
+
+    func testAnEditedSkillStays() throws {
+        let dir = home()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try DeveloperSetup.apply(for: .claudeCode, command: command, home: dir)
+        let skill = dir.appendingPathComponent(".claude/skills/search/SKILL.md")
+        try (DeveloperSetup.skillText + "\nMy own note.\n").write(to: skill, atomically: true, encoding: .utf8)
+
+        let report = DeveloperSetup.remove(for: .claudeCode, command: command, home: dir)
+        XCTAssertEqual(report.kept.count, 1, report.kept.joined())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: skill.path), "a skill someone changed is theirs")
+    }
+
+    func testRemovingWhatWasNeverThereDoesNothing() throws {
+        let dir = home()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let report = DeveloperSetup.remove(for: .claudeCode, command: command, home: dir)
+        XCTAssertTrue(report.isEmpty, report.said)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(".claude.json").path),
+                       "nothing was created to remove from")
+    }
 }

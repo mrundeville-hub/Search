@@ -4432,6 +4432,20 @@ final class Bench {
                 answer(["error": "developers needs a client: claude_code or codex"])
                 return
             }
+            if request["action"] as? String == "remove" {
+                guard let command = DeveloperSetup.command else {
+                    answer(["error": "this build has no MCP server inside it"])
+                    return
+                }
+                guard let home = (request["home"] as? String).map({ URL(fileURLWithPath: $0, isDirectory: true) }) else {
+                    answer(["error": "developers needs a home"])
+                    return
+                }
+                let report = DeveloperSetup.remove(for: client, command: command, home: home)
+                answer(["removed": report.removed.map(\.path), "kept": report.kept,
+                        "said": report.said])
+                return
+            }
             guard let command = DeveloperSetup.command else {
                 answer(["error": "this build has no MCP server inside it"])
                 return
