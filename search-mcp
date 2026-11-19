@@ -465,6 +465,32 @@ TOOLS = [
         {"type": "object", "properties": {"index": {"type": "number"}}, "required": ["index"]},
     ),
     (
+        "memory_write",
+        passing("memory_write", ["text", "key"]),
+        "Keep a note for your next session: what you learned about this Mac, a site or a task. 4,000 characters at most, and the two hundredth note pushes the oldest out.",
+        {"type": "object", "properties": {"text": {"type": "string"},
+                                          "key": {"type": "string", "description": "What to file it under; made from the first words when left out"}},
+         "required": ["text"]},
+    ),
+    (
+        "memory_read",
+        passing("memory_read", ["key"]),
+        "The notes you kept before, newest first, or the one filed under a key.",
+        {"type": "object", "properties": {"key": {"type": "string"}}},
+    ),
+    (
+        "memory_search",
+        passing("memory_search", ["query"]),
+        "Your notes carrying every one of these words.",
+        {"type": "object", "properties": {"query": {"type": "string"}}},
+    ),
+    (
+        "memory_forget",
+        passing("memory_forget", ["key"]),
+        "Throw one note away. The person can empty the lot in Settings › About › Developer.",
+        {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]},
+    ),
+    (
         "disconnect",
         tool_disconnect,
         "Let go of Search: its Stop and the mark on the tab you work in go, and your tabs stay for the person to look at.",

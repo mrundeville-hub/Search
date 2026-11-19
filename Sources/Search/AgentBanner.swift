@@ -297,7 +297,8 @@ private struct AgentQuestion: View {
         let from = session.program.isEmpty ? "" : "From \(session.program) on this Mac. "
         return from + "It works in tabs of its own while you watch, until you press Stop. "
             + "It never sees passwords, card numbers, private tabs or Settings. "
-            + "It can read your bookmarks and the places you have been lately, and go to another space of this window."
+            + "It can read your bookmarks and the places you have been lately, go to another space of this window, "
+            + "and keep notes of its own in Search's folder."
     }
 }
 

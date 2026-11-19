@@ -703,6 +703,7 @@ struct SettingsPanel: View {
         case "developer.codex": DeveloperButton(client: .codex, prefs: prefs)
         case "developer.copyconfig": CopyAgentConfig()
         case "developer.remove": DeveloperRemove()
+        case "developer.memory": AgentMemoryControl()
         case "pages.snippets": Switch(on: $prefs.pageSnippets)
         case "pages.floatcalls": Switch(on: $prefs.floatsCalls)
         case "links.little.tabs": Switch(on: $prefs.littleFindsTabs)

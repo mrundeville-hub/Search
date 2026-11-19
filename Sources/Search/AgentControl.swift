@@ -1160,6 +1160,28 @@ final class AgentControl: ObservableObject {
                 answer(["places": AgentWide.recent(browser,
                                                   words: request["query"] as? String ?? "",
                                                   limit: limit)])
+            case "memory_write":
+                let key = request["key"] as? String
+                guard let note = AgentMemory.shared.write(request["text"] as? String ?? "", key: key) else {
+                    throw AgentRefusal(code: "nothing_to_keep",
+                                       message: "That note is empty",
+                                       hint: "Send some text for it: what is worth remembering next time.")
+                }
+                answer(["kept": note.key, "chars": note.text.count])
+            case "memory_read":
+                let notes = AgentMemory.shared.read(request["key"] as? String)
+                answer(["notes": notes.map { ["key": $0.key, "text": $0.text,
+                                              "date": ISO8601DateFormatter().string(from: $0.date)] }])
+            case "memory_search":
+                let found = AgentMemory.shared.search(request["query"] as? String ?? "")
+                answer(["notes": found.map { ["key": $0.key, "text": $0.text,
+                                              "date": ISO8601DateFormatter().string(from: $0.date)] }])
+            case "memory_forget":
+                guard let key = request["key"] as? String else {
+                    throw AgentRefusal(code: "no_key", message: "Which note? Send its key.",
+                                       hint: "memory_search finds them.")
+                }
+                answer(["forgotten": AgentMemory.shared.forget(key)])
             case "spaces":
                 answer(["spaces": AgentWide.spaces(browser)])
             case "space_switch":

@@ -126,6 +126,35 @@ def main():
 
         narrowed, bad = client.tool("history", query="nothing-matches-this-at-all")
         t.ok("words that match nothing narrow it away", not bad and narrowed["places"] == [], narrowed)
+
+        # ---- the notebook
+        kept_note, bad = client.tool("memory_write", text="This Mac runs the dev server on :3000",
+                                     key="dev-server")
+        t.ok("an agent can keep a note", not bad and kept_note["kept"] == "dev-server", kept_note)
+
+        read_back, bad = client.tool("memory_read", key="dev-server")
+        t.ok("and read it back", not bad and read_back["notes"][0]["text"].endswith(":3000"), read_back)
+
+        found, bad = client.tool("memory_search", query="dev server")
+        t.ok("and find it by a word", not bad and len(found["notes"]) == 1, found)
+
+        # A second session finds what the first wrote.
+        client.close()
+        client = Client()
+        # A new session asks again: the call is sent, the question appears, and
+        # the person's Allow answers it, as the first time.
+        again = client.send_tool("memory_read", key="dev-server")
+        waited = time.time() + 10
+        while agents().get("state") != "asking" and time.time() < waited:
+            time.sleep(0.1)
+        agents("allow")
+        second, bad = client.answer_tool(again)
+        t.ok("the next session finds it", not bad and second["notes"][0]["key"] == "dev-server", second)
+
+        gone, bad = client.tool("memory_forget", key="dev-server")
+        t.ok("and it can be thrown away", not bad and gone["forgotten"] is True, gone)
+        empty, bad = client.tool("memory_read")
+        t.ok("the notebook is empty after", not bad and empty["notes"] == [], empty)
     finally:
         if client:
             client.close()
