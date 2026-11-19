@@ -6,6 +6,9 @@ not included in this repo).
 
 ## Rules for every port
 
+0. **Where the work lives:** `port/plan` is the documents (this file, GAP.md) and the build fixes;
+   `port/phase-1` is the phase-1 code on top of it, one commit per feature — userscripts
+   (`ffaf18f`, `d3845fe`, `2de42b1`, `6433187`) then link cards (`53c1ff5`).
 1. **One feature per branch, one commit per feature.** Branch `port/<feature>`, message
    `Port <feature> from Yab (Apache-2.0)`, and the ported files keep a header:
    `// Ported from Yab (github.com/yetanotherbrowser/yab), Apache-2.0, Copyright 2026 Serafim Korablev`.
