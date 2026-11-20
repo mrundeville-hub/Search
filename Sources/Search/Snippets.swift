@@ -10,7 +10,7 @@ import SwiftUI
 // Replacements, Alfred, espanso and Raycast, and working in Mail too. This is
 // the plain half of it: a list of your own, a name taken in with a space or Tab
 // in any box on a page that isn't for a password or a code, and nothing else.
-// No list under the caret, no import, nothing in the address field yet.
+// Suggestions also appear while typing a name.
 //
 // Off until Settings › Browsing › Pages › "Snippets in a page's boxes". Kept in
 // snippets.json beside the other small files.
@@ -67,6 +67,30 @@ final class Snippets: ObservableObject {
         return snippet
     }
 
+    func expand(in editor: NSTextView) -> Bool {
+        guard Self.on, !editor.hasMarkedText() else { return false }
+        let caret = editor.selectedRange()
+        let value = editor.string as NSString
+        guard caret.length == 0, caret.location <= value.length else { return false }
+        let prefix = value.substring(to: caret.location)
+        guard let token = prefix.range(of: #";[\p{L}\p{N}_-]{1,32}$"#, options: .regularExpression),
+              let snippet = all.first(where: { $0.name == String(prefix[token].dropFirst()) }) else { return false }
+        editor.insertText(snippet.text, replacementRange: NSRange(token, in: prefix))
+        return true
+    }
+
+    func importReplacements(_ replacements: [String: String]) -> Int {
+        var names = Set(all.map(\.name))
+        let additions = replacements.keys.sorted().compactMap { name -> Snippet? in
+            guard !name.isEmpty, Snippet.tidyName(name) == name,
+                  let text = replacements[name], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  names.insert(name).inserted else { return nil }
+            return Snippet(name: name, text: text)
+        }
+        if !additions.isEmpty { all.append(contentsOf: additions); save() }
+        return additions.count
+    }
+
     func remove(_ name: String) {
         all.removeAll { $0.name == name }
         save()
@@ -90,14 +114,80 @@ final class Snippets: ObservableObject {
     static let take = """
     function (snippets) {
       if (!snippets || Object.keys(snippets).length === 0) return;
-      var NAME = /;([A-Za-z0-9_-]{1,32})/;
+      var NAME = /;([\\p{L}\\p{N}_-]{1,32})[ \\t]$/u;
+      var token = /;([\\p{L}\\p{N}_-]{0,32})$/u;
+      var popup, owner, choices = [], selected = 0;
+      function hide() {
+        if (popup) popup.remove();
+        popup = owner = null;
+        choices = [];
+      }
+      function accept() {
+        var el = owner, choice = choices[selected];
+        if (!el || !choice) return;
+        var caret = el.selectionStart, match = token.exec(el.value.slice(0, caret));
+        hide();
+        if (match) replace(el, caret - match[0].length, caret, snippets[choice]);
+      }
+      function caretPoint(el) {
+        var rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+        var mirror = document.createElement('div'), marker = document.createElement('span');
+        mirror.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;overflow:hidden;box-sizing:border-box';
+        for (var prop of ['font','letterSpacing','lineHeight','textAlign','textIndent','direction','padding','border'])
+          mirror.style[prop] = style[prop];
+        mirror.style.left = rect.left + 'px';
+        mirror.style.top = rect.top + 'px';
+        mirror.style.width = el.offsetWidth + 'px';
+        mirror.style.height = rect.height + 'px';
+        mirror.style.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
+        mirror.style.overflowWrap = 'break-word';
+        mirror.append(el.value.slice(0, el.selectionStart));
+        marker.textContent = el.value.slice(el.selectionStart, el.selectionStart + 1) || '|';
+        mirror.append(marker);
+        document.documentElement.append(mirror);
+        mirror.scrollTop = el.scrollTop;
+        mirror.scrollLeft = el.scrollLeft;
+        var point = marker.getBoundingClientRect();
+        mirror.remove();
+        return point;
+      }
+      function suggest(el) {
+        hide();
+        if (!el || el.selectionStart == null || el.selectionStart !== el.selectionEnd) return;
+        var match = token.exec(el.value.slice(0, el.selectionStart));
+        if (!match || !match[1]) return;
+        choices = Object.keys(snippets).filter(k => k.startsWith(match[1])).sort().slice(0, 6);
+        if (!choices.length) return;
+        owner = el;
+        selected = 0;
+        popup = document.createElement('div');
+        var rect = caretPoint(el);
+        popup.style.cssText = 'position:fixed;z-index:2147483647;background:Canvas;color:CanvasText;border:1px solid GrayText;padding:3px;font:13px system-ui';
+        popup.style.left = Math.max(0, Math.min(rect.left, innerWidth - 160)) + 'px';
+        popup.style.top = Math.max(0, Math.min(rect.bottom, innerHeight - choices.length * 24 - 8)) + 'px';
+        choices.forEach(function(name, index) {
+          var row = popup.appendChild(document.createElement('div'));
+          row.textContent = ';' + name;
+          row.style.cssText = 'padding:2px 8px;line-height:20px;cursor:pointer';
+          row.onmousedown = function(e) { e.preventDefault(); selected = index; accept(); };
+        });
+        document.documentElement.appendChild(popup);
+        paint();
+      }
+      function paint() {
+        Array.from(popup.children).forEach((row,i) => row.style.fontWeight = i === selected ? 'bold' : 'normal');
+      }
+      document.addEventListener('focusout', hide, true);
+      document.addEventListener('pointerdown', e => { if (popup && !popup.contains(e.target)) hide(); }, true);
+      window.addEventListener('scroll', hide, true);
+      window.addEventListener('resize', hide);
 
       function box(el) {
         if (!el || el.__searchSnippetBusy) return null;
+        if (el.autocomplete && /one-time-code/.test(el.autocomplete)) return null;
         if (el.tagName === 'INPUT') {
           var type = (el.type || 'text').toLowerCase();
           if (!/^(text|search|url|email|tel)$/.test(type)) return null;
-          if (el.autocomplete && /one-time-code/.test(el.autocomplete)) return null;
           return el;
         }
         if (el.tagName === 'TEXTAREA') return el;
@@ -126,29 +216,34 @@ final class Snippets: ObservableObject {
       // `;name` and a space, as it is typed: the token goes, the text stays.
       document.addEventListener('input', function (event) {
         var el = box(event.target);
-        if (!el || el.selectionStart == null) return;
-        var before = el.value.slice(0, el.selectionStart);
-        var match = NAME.exec(before);
-        if (!match) return;
-        var ending = before.slice(match.index + match[0].length);
-        if (!/^[ \\t]$/.test(ending)) return;
-        var text = snippets[match[1]];
-        if (!text) return;
-        var start = match.index;
-        var end = match.index + match[0].length + ending.length;
-        replace(el, start, end, text);
+        if (!el || el.selectionStart == null || event.isComposing) { hide(); return; }
+        var caret = el.selectionStart;
+        var match = NAME.exec(el.value.slice(0, caret));
+        if (!match || !Object.hasOwn(snippets, match[1])) { suggest(el); return; }
+        hide();
+        replace(el, match.index, caret, snippets[match[1]]);
       }, true);
 
       // `;name` and Tab, before the space is ever typed.
       document.addEventListener('keydown', function (event) {
+        if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+        if (popup && owner === event.target && !event.shiftKey) {
+          if (event.key === 'Escape') { hide(); event.preventDefault(); return; }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+            paint(); event.preventDefault(); return;
+          }
+          if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); accept(); return; }
+          if (['Home','End','ArrowLeft','ArrowRight'].includes(event.key)) hide();
+        }
         if (event.key !== 'Tab' || event.shiftKey) return;
         var el = box(event.target);
         if (!el || el.selectionStart == null) return;
         var caret = el.selectionStart;
         if (caret !== el.selectionEnd) return;
         var before = el.value.slice(0, caret);
-        var match = /;([A-Za-z0-9_-]{1,32})$/.exec(before);
-        if (!match) return;
+        var match = token.exec(before);
+        if (!match || !Object.hasOwn(snippets, match[1])) return;
         var text = snippets[match[1]];
         if (!text) return;
         event.preventDefault();
@@ -182,6 +277,7 @@ final class Snippets: ObservableObject {
 struct SnippetsPanel: View {
     @ObservedObject private var snippets = Snippets.shared
 
+    @State private var imported: Int?
     @State private var name = ""
     @State private var text = ""
 
@@ -234,6 +330,10 @@ struct SnippetsPanel: View {
                             }
                             .disabled(!canAdd)
                         }
+                        Button("Import macOS Text Replacements") {
+                            imported = snippets.importReplacements(NSSpellChecker.shared.userReplacementsDictionary)
+                        }
+                        if let imported { Text("Imported " + String(imported) + " new snippets.") }
                         if let problem {
                             Text(problem)
                                 .font(.system(size: 11.5))

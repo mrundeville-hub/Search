@@ -159,6 +159,8 @@ struct PinFolderHeading: View {
         if folder.isLive {
             Button("Refresh") { LiveFolders.refresh(folder.id, in: browser.spaceID) }
         } else {
+            Button("New Tab in Folder") { browser.newTab(inFolder: folder.id) }
+                .disabled(browser.active?.shy == true)
             Button("New Folder Inside") { browser.newPinFolder(in: folder.id) }
                 .disabled(!PinTree.canMake(in: folder.id, in: folders))
             Button("New Live Folder Inside…") { LiveFolders.ask(for: browser, in: folder.id) }

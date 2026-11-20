@@ -5,7 +5,7 @@ hidden probe (idea 702).
 Build first (`./build.sh`), then `SEARCH_1PASSWORD=1 python3
 Tests/onepassword_inline.py`. Without SEARCH_1PASSWORD it says so and
 passes: it downloads 1Password's extension from the Chrome Web Store
-(~18 MB). It runs a copy of build/Search.app under a bundle id of its own,
+(~18 MB). It runs a copy of build/runde.app under a bundle id of its own,
 in a world of its own with split_view.py's harness, started hidden; the
 copy, the extension, its WebKit folders and the world are removed
 afterwards. No 1Password account and no 1Password app are involved: the
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("onepassword-inline")
-BUNDLE = "com.officecommun.search.onepasswordinline"
+BUNDLE = "app.runde.browser.onepasswordinline"
 ONEPASSWORD = "aeblfdkhhhdcdjpifhhbdiojplfjncoa"
 GATE = "inlineDisabled:!r.inlineEnabled||$a.has(e.tab)||!o,"
 # Where the worker's configuration comes back to the page (injected.js).
@@ -99,8 +99,8 @@ def unpacked(gate_open):
 
 
 def probe_copy():
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}", str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(Path(sv.ROOT, "Search.entitlements")), "--deep", str(app)],

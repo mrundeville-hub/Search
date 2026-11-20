@@ -24,7 +24,7 @@ final class SidebarSplitDragTests: XCTestCase {
     override class func tearDown() {
         if let world = Store.world, world.hasPrefix("sidebar-split-drag-") {
             try? FileManager.default.removeItem(at: Store.folder)
-            UserDefaults.standard.removePersistentDomain(forName: "com.officecommun.search.test.\(world)")
+            UserDefaults.standard.removePersistentDomain(forName: "app.runde.browser.test.\(world)")
         }
         super.tearDown()
     }

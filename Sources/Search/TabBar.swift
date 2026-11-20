@@ -1125,6 +1125,11 @@ struct Carried: ViewModifier {
     var holding: ((Bool) -> Void)? = nil
     let move: (Int) -> Void
 
+    private func offerSpaceMove() -> Bool {
+        guard let browser, let tab else { return false }
+        return SpaceMenu.offerMove(tab, in: browser)
+    }
+
     @State private var held = false
     @State private var from = 0
     /// Where in the row its leading edge was when it was picked up.
@@ -1244,7 +1249,8 @@ struct Carried: ViewModifier {
                             // before anything else here.
                             let cancelled: Bool
                             if case .cancelled = finished.drop { cancelled = true } else { cancelled = false }
-                            if land?(cancelled ? nil : value.location) != true {
+                            let movedToSpace = !cancelled && SpaceMenu.offerMove(source, in: browser)
+                            if !movedToSpace, land?(cancelled ? nil : value.location) != true {
                                 switch finished.drop {
                                 case .stage(let target, let onLeft):
                                     browser.pair(source, with: target, onLeft: onLeft)
@@ -1264,7 +1270,7 @@ struct Carried: ViewModifier {
                                     if reordered { move(from) }
                                 }
                             }
-                        } else if land?(value.location) != true, outside?() != true {
+                        } else if !offerSpaceMove(), land?(value.location) != true, outside?() != true {
                             if let onDropTab, let tab { onDropTab(tab, value.location) }
                             else { onDrop?(value.location) }
                         }

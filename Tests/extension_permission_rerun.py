@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("extension-permission-rerun")
-BUNDLE = "com.officecommun.search.permissionrerun"
+BUNDLE = "app.runde.browser.permissionrerun"
 work = Path(tempfile.mkdtemp(prefix="search-rerun-"))
 PORT = sv.srv.server_port
 A = f"http://127.0.0.1:{PORT}"
@@ -108,8 +108,8 @@ SITES = {
 
 
 def probe_copy():
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}", str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(Path(sv.ROOT, "Search.entitlements")), "--deep", str(app)],

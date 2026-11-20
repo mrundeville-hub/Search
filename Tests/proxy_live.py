@@ -2,7 +2,7 @@
 """Settings › Privacy › Proxy really carries Search's traffic, in a hidden probe.
 
 Build first (`./build.sh`), then `python3 Tests/proxy_live.py`. It runs a copy
-of build/Search.app under a bundle id of its own, hidden, in a world of its
+of build/runde.app under a bundle id of its own, hidden, in a world of its
 own with split_view.py's harness; the copy, its WebKit folders and the world
 are removed afterwards.
 
@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("proxy-live")
-BUNDLE = "com.officecommun.search.proxylive"
+BUNDLE = "app.runde.browser.proxylive"
 work = Path(tempfile.mkdtemp(prefix="search-proxylive-"))
 
 seen = []           # (method, host, port, path) the proxy was asked for
@@ -173,8 +173,8 @@ PROXY_PORT = proxy.server_port
 
 
 def probe_copy():
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}",
                     str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)

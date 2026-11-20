@@ -525,6 +525,7 @@ final class Browser: NSObject, ObservableObject {
     @Published var assisting: Assistant?
     /// The side panel, beside the page (see SidePanel.swift): up or
     /// not, and what is in it.
+    weak var spaceDropAnchor: NSView?
     @Published var sidePanelShown = false
     @Published var sidePanel: SidePanelContent?
     /// The Settings page it opens on next.
@@ -4575,6 +4576,18 @@ final class Browser: NSObject, ObservableObject {
         typed = ""
     }
 
+    func newTab(inFolder folder: UUID) {
+        guard active?.shy != true, pinFolders.contains(where: { $0.id == folder && !$0.isLive }) else { return }
+        let tab = Tab(configuration: Web.configuration(space: spaceID))
+        prepare(tab)
+        tabs.append(tab)
+        pin(tab, listed: true)
+        movePin(tab, into: folder)
+        setPinFolderFolded(folder, false)
+        select(tab)
+        focusRequest += 1
+    }
+
     func newTab() {
         if websitePopup {
             if active?.shy == true { tabDestination.newShyTab() } else { tabDestination.newTab() }
@@ -4601,7 +4614,7 @@ final class Browser: NSObject, ObservableObject {
         // repeated ⌘T must not leave a row of identical empty tabs. Never
         // one in a group: ⌘T's tab is in none, and an empty tab left in a
         // group took the page typed next into it (#1151).
-        if let blank = tabs.last(where: { $0.isBlank && !$0.bench && !$0.shy && split(for: $0) == nil
+        if let blank = tabs.last(where: { $0.isBlank && $0.pin == nil && !$0.bench && !$0.shy && split(for: $0) == nil
                                           && !(prefs.usesTabGroups && group(of: $0) != nil) }) {
             placeBlank(blank)
             if activeID != blank.id { leaving() }

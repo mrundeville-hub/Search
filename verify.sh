@@ -25,8 +25,8 @@ units() {
 }
 
 behaviour() {
-  if [ ! -d build/Search.app ]; then
-    echo "no build/Search.app: building first"
+  if [ ! -d build/runde.app ]; then
+    echo "no build/runde.app: building first"
     SEARCH_DEV=1 ./build.sh >/dev/null 2>&1 || { echo "FAIL the build"; exit 1; }
   fi
   for test in userscripts link_cards boosts snippets agent_wide developers call_window; do

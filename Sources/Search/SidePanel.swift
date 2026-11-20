@@ -34,6 +34,7 @@ enum SidePanelContent: Equatable {
     /// Downloads, for whoever chose it in Settings › Downloads › Open
     /// Downloads: the same list as its tab, beside every page.
     case downloads
+    case spaceChat(UUID)
 }
 
 /// The sites offered in View › Side Panel, as they are typed: a short list,
@@ -50,6 +51,24 @@ enum PanelSites {
     static func allowed(_ url: URL?) -> Bool {
         guard let scheme = url?.scheme?.lowercased() else { return false }
         return scheme == "https" || scheme == "http"
+    }
+}
+
+enum SpaceChat {
+    static func address(for space: UUID) -> URL {
+        guard let saved = Store.settings.string(forKey: "chat.thread." + space.uuidString),
+              let id = UUID(uuidString: saved) else { return PanelSites.offered[0].url }
+        return URL(string: "https://claude.ai/chat/" + id.uuidString.lowercased())!
+    }
+
+    static func remember(_ url: URL, for space: UUID) {
+        guard url.scheme == "https", url.host == "claude.ai" else { return }
+        let parts = url.pathComponents
+        let key = "chat.thread." + space.uuidString
+        if parts == ["/", "new"] { Store.settings.removeObject(forKey: key) }
+        if parts.count == 3, parts[1] == "chat", let id = UUID(uuidString: parts[2]) {
+            Store.settings.set(id.uuidString, forKey: key)
+        }
     }
 }
 
@@ -172,7 +191,12 @@ extension Browser {
 
     /// The site in the panel, as a tab of its own, and the panel closed.
     func sitePanelToTab() {
-        guard case .site(let first, _) = sidePanel else { return }
+        let first: URL
+        switch sidePanel {
+        case .site(let url, _): first = url
+        case .spaceChat: first = PanelSites.offered[0].url
+        default: return
+        }
         let url = SidePanelPages.shared.siteArrived(in: self) ?? first
         closeSidePanel()
         open(url, foreground: true)
@@ -180,7 +204,20 @@ extension Browser {
 
     /// The window went to another space: the site comes again, signed in as
     /// that space is.
+    func openSpaceChat() {
+        guard !isPopup, prefs.sitesInPanel else { return }
+        closeSidePanel()
+        let url = SpaceChat.address(for: spaceID)
+        SidePanelPages.shared.loadSite(url, space: spaceID, in: self)
+        sidePanel = .spaceChat(spaceID)
+        sidePanelShown = true
+    }
+
     func sitePanelFollowsSpace() {
+        if case .spaceChat(let previous) = sidePanel, previous != spaceID {
+            openSpaceChat()
+            return
+        }
         guard case .site(let first, let space) = sidePanel, space != spaceID else { return }
         let url = SidePanelPages.shared.siteArrived(in: self) ?? first
         SidePanelPages.shared.loadSite(url, space: spaceID, in: self)
@@ -349,6 +386,11 @@ final class SidePanelPages: NSObject {
     }
 
     func drop(in browser: Browser) {
+        if case .spaceChat(let space) = browser.sidePanel,
+           let arrived = siteArrived(in: browser), arrived.scheme == "https",
+           arrived.host == PanelSites.offered[0].url.host {
+            SpaceChat.remember(arrived, for: space)
+        }
         guard let page = pages.removeValue(forKey: ObjectIdentifier(browser)) else { return }
         page.web.stopLoading()
         page.web.navigationDelegate = nil
@@ -666,7 +708,7 @@ struct SidePanelView: View {
                 Rectangle().fill(Palette.hairline).frame(height: 1)
                 PanelPage(web: SidePanelPages.shared.web(in: browser))
             }
-        case .site:
+        case .site, .spaceChat:
             VStack(spacing: 0) {
                 // Its own line for each page made: a new site's line
                 // watches the new page, not the one let go.

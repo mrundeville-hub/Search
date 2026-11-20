@@ -4029,6 +4029,9 @@ final class Bench {
                 // A tab pinned as a row, ready for a folder.
                 guard let tab = pinned("id") else { answer(missing(request)); return }
                 if tab.pin == nil { browser.pin(tab, listed: true) } else if !tab.listed { browser.setListed(tab, true) }
+            case "newTab":
+                guard let folder = named("name") else { answer(["error": "Unknown folder"]); return }
+                browser.newTab(inFolder: folder.id)
             case "new":
                 // New Folder, holding a pin (its menu's) or inside a folder
                 // (a folder's menu's New Folder Inside).
@@ -4641,6 +4644,7 @@ final class Bench {
                                                        "inspectable": web.map { if #available(macOS 13.3, *) { return $0.isInspectable } else { return false } } ?? false,
                                                        "developerExtras": web.flatMap { $0.configuration.preferences.value(forKey: "developerExtrasEnabled") as? Bool } ?? false]
                 .merging(SidePanelPages.shared.siteReport(in: browser)) { a, _ in a }
+            case .spaceChat(let space): content = ["kind": "spaceChat", "space": space.uuidString]
             case .downloads: content = ["kind": "downloads"]
             case nil: break
             }

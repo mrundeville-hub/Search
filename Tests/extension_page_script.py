@@ -3,7 +3,7 @@
 still runs in the page, in a hidden probe.
 
 Build first (`./build.sh`), then `python3 Tests/extension_page_script.py`.
-It runs a copy of build/Search.app under a bundle id of its own, in a world
+It runs a copy of build/runde.app under a bundle id of its own, in a world
 of its own with split_view.py's harness, started hidden; the copy, its
 WebKit folders and the world are removed afterwards.
 
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("ext-page-script")
-BUNDLE = "com.officecommun.search.extpagescript"
+BUNDLE = "app.runde.browser.extpagescript"
 LR, AL = "hoombieeljmmljlkjmnheibnpciblicm", "paponcgjfojgemddooebbgniglhkajkj"
 work = Path(tempfile.mkdtemp(prefix="search-extpagescript-"))
 
@@ -108,9 +108,9 @@ LOOK = "JSON.stringify(Object.assign({}, document.documentElement.dataset))"
 
 
 def probe_copy():
-    """build/Search.app under a bundle id of its own, signed ad hoc."""
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    """build/runde.app under a bundle id of its own, signed ad hoc."""
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}", str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(Path(sv.ROOT, "Search.entitlements")), "--deep", str(app)],

@@ -3,7 +3,7 @@
 pick it, in a hidden probe (idea 702).
 
 Build first (`./build.sh`), then `python3 Tests/passkey_extension.py`. It
-runs a copy of build/Search.app under a bundle id of its own, in a world of
+runs a copy of build/runde.app under a bundle id of its own, in a world of
 its own with split_view.py's harness, started hidden; the copy, its WebKit
 folders and the world are removed afterwards. No account, no real passkey:
 the extension here stands in for one.
@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("passkey-extension")
-BUNDLE = "com.officecommun.search.passkeyextension"
+BUNDLE = "app.runde.browser.passkeyextension"
 work = Path(tempfile.mkdtemp(prefix="search-passkeyextension-"))
 
 # The site: a request under the field at load; the passkey button puts it
@@ -208,8 +208,8 @@ addEventListener('keeper-slow', (e) => {
 
 
 def probe_copy():
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}", str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(Path(sv.ROOT, "Search.entitlements")), "--deep", str(app)],

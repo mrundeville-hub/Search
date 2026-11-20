@@ -77,6 +77,10 @@ try:
     pf(action="delete", name="Docs")
     st = pf(action="state")
     t.ok("delete Docs: b goes up into Work", ["b", "Work"] in (st.get("saved") or []), st.get("saved"))
+    pf_before = st
+    st = pf(action="newTab", name="Work")
+    t.ok("new tab belongs to Work", sum(row[2] == "Work" for row in st["order"]) ==
+         sum(row[2] == "Work" for row in pf_before["order"]) + 1, st["order"])
     pf(action="off")
     st = pf(action="state")
     t.ok("off: the setting is off (the column draws flat rows)", st.get("setting") is False, st.get("setting"))

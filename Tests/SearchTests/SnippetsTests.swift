@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import Search
 
@@ -74,6 +75,35 @@ final class SnippetsTests: XCTestCase {
         Snippets.on = true
         XCTAssertNil(snippets.script())
         Snippets.on = false
+    }
+
+    @MainActor
+    func testAddressExpansionReplacesOnlyTokenBeforeCaret() {
+        let (snippets, dir) = store()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = Snippets.on
+        defer { Snippets.on = previous }
+        snippets.add(name: "дом", text: "home")
+        let editor = NSTextView()
+        editor.string = "🌿 ;дом later"
+        editor.setSelectedRange(NSRange(location: ("🌿 ;дом" as NSString).length, length: 0))
+        Snippets.on = false
+        XCTAssertFalse(snippets.expand(in: editor))
+        Snippets.on = true
+        XCTAssertTrue(snippets.expand(in: editor))
+        XCTAssertEqual(editor.string, "🌿 home later")
+    }
+
+    @MainActor
+    func testImportPreservesExistingAndSkipsInvalidTriggers() {
+        let (snippets, dir) = store()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        snippets.add(name: "sig", text: "mine")
+        let items = ["sig": "system", "привет": "Здравствуйте", "two words": "invalid"]
+        XCTAssertEqual(snippets.importReplacements(items), 1)
+        XCTAssertEqual(snippets.importReplacements(items), 0)
+        XCTAssertEqual(Snippets(file: dir.appendingPathComponent("snippets.json")).byName,
+                       ["sig": "mine", "привет": "Здравствуйте"])
     }
 
     func testQuotesInASnippetCannotBreakTheScript() {

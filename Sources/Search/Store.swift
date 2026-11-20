@@ -123,7 +123,7 @@ enum Store {
     static let folder: URL = {
         let support = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let home = support.appendingPathComponent(world.map { "Search (\($0))" } ?? "Search", isDirectory: true)
+        let home = support.appendingPathComponent(world.map { "runde (\($0))" } ?? "runde", isDirectory: true)
         if !testing {
             let old = support.appendingPathComponent("Office Browser", isDirectory: true)
             let files = FileManager.default
@@ -159,7 +159,7 @@ enum Store {
             carryOver(into: .standard)
             return .standard
         }
-        let suite = world == "test" ? "com.officecommun.search.test" : "com.officecommun.search.test.\(world ?? "")"
+        let suite = world == "test" ? "app.runde.browser.test" : "app.runde.browser.test.\(world ?? "")"
         return UserDefaults(suiteName: suite) ?? .standard
     }()
 

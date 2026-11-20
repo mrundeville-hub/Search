@@ -107,6 +107,12 @@ def main():
         t.ok("a name that isn't there is left as typed", value(page, "#box") == ";nothing ",
              repr(value(page, "#box")))
 
+        clear(page, "#box")
+        typed(page, "#box", ";om")
+        sv.ev(page, """document.querySelector('#box').dispatchEvent(new KeyboardEvent('keydown',
+            {key:'Enter', bubbles:true, cancelable:true}))""")
+        t.ok("Return accepts the suggested completion", value(page, "#box") == QUICK)
+
         clear(page, "#pw")
         typed(page, "#pw", ";omw ")
         t.ok("a box for a password is never touched", value(page, "#pw") == ";omw ",

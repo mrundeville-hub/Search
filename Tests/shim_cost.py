@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("shim-cost")
-BUNDLE = "com.officecommun.search.shimcost"
+BUNDLE = "app.runde.browser.shimcost"
 work = Path(tempfile.mkdtemp(prefix="search-shimcost-"))
 
 KIDS = 20
@@ -107,10 +107,10 @@ def files(name):
 
 
 def probe_copy():
-    app = work / "Search.app"
+    app = work / "runde.app"
     if app.exists():
         return str(app)
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}",
                     str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)

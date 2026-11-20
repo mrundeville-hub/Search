@@ -6,7 +6,7 @@ that tab's site only until the tab leaves it.
 
 Build first (`./build.sh debug`), then, one probe at a time,
 `lockf -t 900 /private/tmp/claude-501/search-probe.lock python3 Tests/extension_site_access.py`.
-It runs a copy of build/Search.app under a bundle id of its own, hidden, in
+It runs a copy of build/runde.app under a bundle id of its own, hidden, in
 a world of its own with split_view.py's harness; the copy, its WebKit
 folders and the world are removed afterwards.
 
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import split_view as sv  # noqa: E402
 
 sv.use("extension-site-access")
-BUNDLE = "com.officecommun.search.siteaccess"
+BUNDLE = "app.runde.browser.siteaccess"
 work = Path(tempfile.mkdtemp(prefix="search-siteaccess-"))
 PORT = sv.srv.server_port
 A = f"http://127.0.0.1:{PORT}"
@@ -56,8 +56,8 @@ chrome.action.onClicked.addListener(() => {});
 
 
 def probe_copy():
-    app = work / "Search.app"
-    shutil.copytree(Path(sv.ROOT, "build", "Search.app"), app, symlinks=True)
+    app = work / "runde.app"
+    shutil.copytree(Path(sv.ROOT, "build", "runde.app"), app, symlinks=True)
     subprocess.run(["/usr/libexec/PlistBuddy", "-c", f"Set :CFBundleIdentifier {BUNDLE}", str(app / "Contents/Info.plist")], check=True)
     (app / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
     subprocess.run(["codesign", "-f", "-s", "-", "--entitlements", str(Path(sv.ROOT, "Search.entitlements")), "--deep", str(app)],

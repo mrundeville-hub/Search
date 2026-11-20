@@ -183,6 +183,7 @@ struct SearchApp: App {
                         Button(browser.sidePanelShown ? "Close Side Panel" : "Show Side Panel") { browser.toggleSitePanel() }
                             .shortcut("view.sitePanel")
                         Divider()
+                        Button("Claude Chat for This Space") { browser.openSpaceChat() }
                         ForEach(PanelSites.offered, id: \.name) { site in
                             Button(site.name) { browser.showSiteInPanel(site.url) }
                         }
@@ -1721,6 +1722,9 @@ struct ContentView: View {
         }
         if event.keyCode == 48, !flags.contains(.command), !flags.contains(.option), !flags.contains(.control) {
             if browser.editingTab != nil { return true }
+            if browser.fieldShowing, !flags.contains(.shift), let window, event.window === window,
+               ContentView.inAddressField(window), let editor = window.firstResponder as? NSTextView,
+               Snippets.shared.expand(in: editor) { return true }
             // "red" then Tab: Reddit, in the field (SiteSearch.swift).
             if browser.fieldShowing, !flags.contains(.shift), browser.lockSiteOffer() { return true }
             if browser.fieldShowing, !browser.offers.isEmpty {

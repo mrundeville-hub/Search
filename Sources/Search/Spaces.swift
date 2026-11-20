@@ -748,6 +748,7 @@ extension Browser {
         // Gone from the other windows too: their rows there, and the space
         // itself if one was showing it (the list's change moves it).
         for other in Browsers.all where other !== self { other.forget(space: id) }
+        Store.settings.removeObject(forKey: "chat.thread." + id.uuidString)
         Pins.forget(id)
         // A space signed in with the others has nothing of its own to erase:
         // its cookies are theirs.
@@ -801,6 +802,12 @@ struct SpaceWash: View {
     }
 }
 
+private struct SpaceDropAnchor: NSViewRepresentable {
+    let browser: Browser
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ view: NSView, context: Context) { browser.spaceDropAnchor = view }
+}
+
 struct SpaceDot: View {
     @ObservedObject var browser: Browser
     @State private var hovering = false
@@ -844,6 +851,7 @@ struct SpaceDot: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .background(SpaceDropAnchor(browser: browser).allowsHitTesting(false))
         .animation(Motion.quick, value: browser.space.look)
         .help("\(browser.space.name) — \(KeyCombo.spacesOnCommand ? "⌘1–⌘9" : "⌃1–⌃9"), or two fingers \(browser.prefs.sidebar ? "sideways" : "up or down") over the tabs, to switch")
         .onChange(of: key) { _, now in
@@ -919,6 +927,22 @@ enum SpaceMenu {
         let plain = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         guard let tint else { return plain }
         return plain?.withSymbolConfiguration(.init(paletteColors: [NSColor(tint)]))
+    }
+
+    static func offerMove(_ tab: Tab, in browser: Browser) -> Bool {
+        guard browser.prefs.usesSpaces, browser.spaces.count > 1,
+              let anchor = browser.spaceDropAnchor, let window = anchor.window,
+              anchor.bounds.contains(anchor.convert(window.convertPoint(fromScreen: TabDrag.shared.pointer(in: browser)), from: nil))
+        else { return false }
+        let menu = NSMenu()
+        actions = []
+        for space in browser.spaces where space.id != browser.spaceID {
+            let entry = item("Move to " + space.name) { browser.move(tab, toSpace: space.id) }
+            entry.image = image(space.symbol, tint: space.tint)
+            menu.addItem(entry)
+        }
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        return true
     }
 
     static func show(for browser: Browser) {

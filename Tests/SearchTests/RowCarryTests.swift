@@ -21,7 +21,7 @@ final class RowCarryTests: XCTestCase {
     override class func tearDown() {
         if let world = Store.world, world.hasPrefix("row-carry-") {
             try? FileManager.default.removeItem(at: Store.folder)
-            UserDefaults.standard.removePersistentDomain(forName: "com.officecommun.search.test.\(world)")
+            UserDefaults.standard.removePersistentDomain(forName: "app.runde.browser.test.\(world)")
         }
         super.tearDown()
     }

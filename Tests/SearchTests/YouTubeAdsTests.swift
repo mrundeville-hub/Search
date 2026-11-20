@@ -16,7 +16,7 @@ final class YouTubeAdsTests: XCTestCase {
     }
 
     override class func tearDown() {
-        UserDefaults.standard.removePersistentDomain(forName: "com.officecommun.search.test.\(world)")
+        UserDefaults.standard.removePersistentDomain(forName: "app.runde.browser.test.\(world)")
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.removeItem(at: support.appendingPathComponent("Search (\(world))"))
         super.tearDown()

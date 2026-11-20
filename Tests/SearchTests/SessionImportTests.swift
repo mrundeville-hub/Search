@@ -333,8 +333,8 @@ final class SessionImportTests: XCTestCase {
         defer {
             Disk.drain()
             if Store.world == world { try? FileManager.default.removeItem(at: Store.folder) }
-            UserDefaults(suiteName: "com.officecommun.search.test.\(world)")?
-                .removePersistentDomain(forName: "com.officecommun.search.test.\(world)")
+            UserDefaults(suiteName: "app.runde.browser.test.\(world)")?
+                .removePersistentDomain(forName: "app.runde.browser.test.\(world)")
             unsetenv("SEARCH_PROBE")
         }
         _ = NSApplication.shared

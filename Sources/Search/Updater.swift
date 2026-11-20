@@ -43,9 +43,9 @@ final class Updater: ObservableObject {
         // SEARCH_ARCH=x86_64) and a feed beside it naming only Intel builds,
         // so neither kind of Mac is ever offered the other's.
         #if arch(x86_64)
-        return URL(string: "https://officecommun.com/search/intel/appcast.json")!
+        return URL(string: "https://runde.invalid/appcast.json")!  // no feed of ours yet
         #else
-        return URL(string: "https://officecommun.com/search/appcast.json")!
+        return URL(string: "https://runde.invalid/appcast.json")!  // no feed of ours yet
         #endif
     }()
 
